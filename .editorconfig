@@ -35,3 +35,7 @@ dotnet_diagnostic.CA1861.severity = none
 [src/Services/Notification/EVMTracker.Notification.Infrastructure/Persistence/Migrations/*.cs]
 # EF Core migrations are generated source; constant arrays are emitted by the tooling.
 dotnet_diagnostic.CA1861.severity = none
+
+[src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure/Persistence/Migrations/*.cs]
+# EF Core migrations are generated source; constant arrays are emitted by the tooling.
+dotnet_diagnostic.CA1861.severity = none

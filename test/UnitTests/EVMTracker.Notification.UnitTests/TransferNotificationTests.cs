@@ -1,3 +1,4 @@
+using EVMTracker.Notification.Application.Transfers;
 using EVMTracker.Notification.Domain.Notifications;
 
 namespace EVMTracker.Notification.UnitTests;
@@ -43,7 +44,67 @@ public sealed class TransferNotificationTests
         Assert.Equal(notification.TransactionHash, notification.TransactionHash.ToLowerInvariant());
     }
 
-    private static TransferNotification CreateNotification(Guid subscriptionId) =>
+    [Theory]
+    [InlineData(TransferDirection.Incoming, "<b>Incoming ERC-20 transfer</b>")]
+    [InlineData(TransferDirection.Outgoing, "<b>Outgoing ERC-20 transfer</b>")]
+    public void RendererIncludesDirectionExplorerLinksAndConfirmation(
+        TransferDirection direction,
+        string expectedHeading)
+    {
+        TransferNotification notification = CreateNotification(
+            SubscriptionId,
+            direction: direction);
+
+        string message = TransferNotificationRenderer.Render(
+            notification,
+            "https://etherscan.io");
+
+        Assert.Contains(expectedHeading, message, StringComparison.Ordinal);
+        Assert.Contains("https://etherscan.io/address/", message, StringComparison.Ordinal);
+        Assert.Contains("https://etherscan.io/token/", message, StringComparison.Ordinal);
+        Assert.Contains("https://etherscan.io/tx/", message, StringComparison.Ordinal);
+        Assert.Contains("Block: 100 · Confirmed", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RendererEscapesUserAndTokenMetadataForTelegramHtml()
+    {
+        TransferNotification notification = CreateNotification(
+            SubscriptionId,
+            label: "Ops <hot> & treasury",
+            tokenSymbol: "A&B",
+            tokenName: "Alpha <Beta>");
+
+        string message = TransferNotificationRenderer.Render(notification, null);
+
+        Assert.Contains("Ops &lt;hot&gt; &amp; treasury", message, StringComparison.Ordinal);
+        Assert.Contains("Alpha &lt;Beta&gt; (A&amp;B)", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ops <hot>", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RendererKeepsUnknownTokenNotificationUsefulWithoutExplorer()
+    {
+        TransferNotification notification = CreateNotification(
+            SubscriptionId,
+            tokenSymbol: "TOKEN-999999",
+            tokenName: null,
+            tokenDecimals: null);
+
+        string message = TransferNotificationRenderer.Render(notification, null);
+
+        Assert.Contains("1234500 TOKEN-999999", message, StringComparison.Ordinal);
+        Assert.Contains("Token: TOKEN-999999", message, StringComparison.Ordinal);
+        Assert.Contains("Transaction: 0xaaaaaa", message, StringComparison.Ordinal);
+    }
+
+    private static TransferNotification CreateNotification(
+        Guid subscriptionId,
+        TransferDirection direction = TransferDirection.Incoming,
+        string? label = "Treasury",
+        string tokenSymbol = "USDC",
+        string? tokenName = "USD Coin",
+        int? tokenDecimals = 6) =>
         TransferNotification.Create(
             subscriptionId,
             Guid.NewGuid(),
@@ -52,12 +113,12 @@ public sealed class TransferNotificationTests
             1,
             "Ethereum",
             "0x2222222222222222222222222222222222222222",
-            "Treasury",
-            TransferDirection.Incoming,
+            label,
+            direction,
             "0x9999999999999999999999999999999999999999",
-            "USDC",
-            "USD Coin",
-            6,
+            tokenSymbol,
+            tokenName,
+            tokenDecimals,
             "1234500",
             "0x1111111111111111111111111111111111111111",
             "0x2222222222222222222222222222222222222222",

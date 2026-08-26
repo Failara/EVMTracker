@@ -1,4 +1,5 @@
 using EVMTracker.TelegramGateway.Application.Commands;
+using EVMTracker.TelegramGateway.Application.Delivery;
 using EVMTracker.TelegramGateway.Infrastructure.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ namespace EVMTracker.TelegramGateway.Infrastructure.Telegram;
 public sealed partial class TelegramPollingWorker(
     ITelegramBotClient botClient,
     TelegramCommandService commandService,
+    ITelegramDeliveryRateLimiter rateLimiter,
     IOptions<TelegramBotOptions> options,
     ILogger<TelegramPollingWorker> logger) : BackgroundService
 {
@@ -84,6 +86,7 @@ public sealed partial class TelegramPollingWorker(
                 correlationId),
             cancellationToken).ConfigureAwait(false);
 
+        await rateLimiter.WaitAsync(message.Chat.Id, cancellationToken).ConfigureAwait(false);
         await botClient.SendMessage(
             message.Chat.Id,
             response,

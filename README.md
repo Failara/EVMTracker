@@ -2,12 +2,12 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 7 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, an idempotent Watchlist projection, and durable ERC-20 transfer matching. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 8 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, an idempotent Watchlist projection, durable ERC-20 transfer matching, and reliable rate-limited Telegram alerts. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
 
 ## Prerequisites
 
 - .NET SDK 10.0.400 or a compatible 10.0 patch selected by `global.json`.
-- PostgreSQL for running the Watchlist API against persistent storage.
+- PostgreSQL for service-owned Watchlist, Indexer, Notification, and Telegram Gateway storage.
 - RabbitMQ for asynchronous integration events.
 - A Telegram bot token created through BotFather for running the Telegram Gateway.
 - At least one EVM JSON-RPC HTTP endpoint for running the indexer.
@@ -48,6 +48,13 @@ dotnet user-secrets set "TelegramBot:BotToken" "<bot-token>" --project src/Servi
 ```
 
 The gateway uses long polling and calls the Watchlist API through the `WatchlistApi:BaseUrl` setting, which defaults to `http://localhost:5150`. The request timeout and supported network names/chain IDs are configured in the gateway's `appsettings.json`.
+
+Configure its delivery ledger and apply the migration before starting the gateway:
+
+```powershell
+$env:ConnectionStrings__TelegramGateway = "Host=localhost;Port=5432;Database=evmtracker_telegram_gateway;Username=postgres;Password=<password>"
+dotnet tool run dotnet-ef database update --project src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure --startup-project src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure --context TelegramGatewayDbContext
+```
 
 Start the Watchlist API and Telegram Gateway in separate terminals:
 
@@ -125,7 +132,7 @@ Each matching subscription creates its own notification, so several users may mo
 
 The logical notification ID is deterministic over subscription ID, chain ID, transaction hash, and log index. A matching database uniqueness constraint provides a second duplicate-defense layer beyond the consumed-event inbox. The notification, `TelegramDeliveryRequestedV1` outbox row, and inbox marker commit atomically.
 
-The Notification outbox dispatcher is enabled in Phase 8 together with the Telegram Gateway's durable delivery queue. Before then, generated delivery requests remain pending in PostgreSQL so RabbitMQ cannot acknowledge and discard an unroutable request.
+The Notification outbox dispatcher and Telegram Gateway's durable `telegram-delivery` queue are enabled. Delivery attempts and terminal status are stored in the gateway database; see `docs/operations/telegram-delivery.md` for configuration and failure handling.
 
 Network display names are configured under `NotificationNetworks:Networks`. Unknown positive chain IDs use an `EVM chain <chainId>` fallback rather than rejecting an otherwise valid transfer.
 

@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 7 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, RabbitMQ outbox dispatch, an idempotent Watchlist projection, and durable ERC-20 transfer matching. Telegram rendering and delivery begin in Phase 8.
+The short version: Phases 1 through 8 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, RabbitMQ outbox dispatch, durable ERC-20 transfer matching, and reliable rate-limited Telegram notification delivery.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 7 completed and verified; Phase 8 is the next implementation step.
+**Status:** Phase 8 completed and verified; Phase 9 is the next implementation step.
 
 ## Current State
 
@@ -52,12 +52,17 @@ The repository currently contains:
 - Stable logical notification identities and a database uniqueness constraint for duplicate defense.
 - Atomic notification, delivery-outbox, and transfer-inbox persistence.
 - Configurable network display names with a safe chain-ID fallback.
+- Escaped, explorer-linked Telegram HTML alerts with transfer direction, wallet identity, token details, block number, and confirmation state.
+- A durable Telegram delivery consumer queue and an active Notification outbox dispatcher.
+- Configurable global and per-chat outbound rate limiting shared by alerts and command replies.
+- Telegram `RetryAfter` handling and bounded exponential retry with jitter for transient failures.
+- A Telegram Gateway-owned PostgreSQL delivery ledger with request, attempt, error, Telegram message ID, and terminal-status history.
+- Event-ID idempotency for successful delivery redelivery and durable RabbitMQ error queues for terminal failures.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Reliable notification delivery.
 - Chain-reorganization correction handling.
 - Full telemetry, operational dashboards, and alerts beyond the baseline health endpoints.
 - Docker and deployment configuration.
@@ -443,7 +448,7 @@ Design note:
 
 Notification persistence uses two idempotency levels. The transfer inbox rejects repeated broker delivery by source `EventId`, while the unique logical identity rejects an equivalent transfer published under another event ID. Notification state, the Telegram delivery-request outbox row, and the inbox marker commit in one database transaction.
 
-The Notification outbox dispatcher is intentionally activated in Phase 8, after the Telegram Gateway declares its durable delivery queue. Until then, delivery requests remain safely pending in PostgreSQL rather than being published to an unroutable exchange.
+The Notification outbox dispatcher was activated in Phase 8 after Telegram Gateway declared its durable delivery queue. This preserves the deployment invariant that a delivery request is not published before a consumer queue can retain it.
 
 Recommended tests:
 
@@ -455,26 +460,28 @@ Recommended tests:
 
 ## Phase 8: Render and Dispatch Telegram Notifications
 
+Status: implemented and verified.
+
 Goal: send compact, verifiable alerts without overwhelming Telegram.
 
 Tasks:
 
-- Render wallet label, direction, network, token amount, token contract, and confirmation state.
-- Add transaction and address explorer links from network configuration.
-- Escape Telegram formatting correctly.
-- Add configurable global and per-chat rate limiters.
-- Respect Telegram `RetryAfter` responses.
-- Retry transient errors with bounded exponential backoff and jitter.
-- Move permanently failed delivery requests to a dead-letter queue.
-- Persist delivery attempts and final status.
+- [x] Render wallet label, direction, network, token amount, token contract, and confirmation state.
+- [x] Add transaction and address explorer links from network configuration.
+- [x] Escape Telegram formatting correctly.
+- [x] Add configurable global and per-chat rate limiters.
+- [x] Respect Telegram `RetryAfter` responses.
+- [x] Retry transient errors with bounded exponential backoff and jitter.
+- [x] Move permanently failed delivery requests to a dead-letter queue.
+- [x] Persist delivery attempts and final status.
 
 Recommended tests:
 
-- Incoming and outgoing notifications render correctly.
-- Unknown token metadata still produces a useful message.
-- Markdown or HTML special characters are escaped.
-- Rate limits do not exceed configured throughput.
-- Transient Telegram failures do not stop the consumer.
+- [x] Incoming and outgoing notifications render correctly.
+- [x] Unknown token metadata still produces a useful message.
+- [x] Markdown or HTML special characters are escaped.
+- [x] Rate limits do not exceed configured throughput.
+- [x] Transient Telegram failures do not stop the consumer.
 
 ## Phase 9: Add Idempotency and Reorganization Handling
 
@@ -608,15 +615,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 8, Telegram rendering and delivery:
+The best next implementation step is Phase 9, idempotency and reorganization handling:
 
-1. Consume Telegram delivery requests in the gateway.
-2. Render explorer-linked, escaped mobile-friendly messages.
-3. Add global and per-chat rate limiting.
-4. Respect Telegram `RetryAfter` and retry transient failures with jitter.
-5. Persist delivery attempts and terminal delivery status.
+1. Persist recent canonical block hashes inside the configured reorganization window.
+2. Detect a mismatched block hash and find the common ancestor.
+3. Rewind checkpoints and publish `TransferOrphaned` events for invalidated logs.
+4. Consume orphan events in Notification and suppress or correct affected alerts.
+5. Add deterministic short-reorganization and restart tests.
 
-This will complete the user-visible alert path from an indexed ERC-20 log to a verifiable Telegram message.
+This will make the already delivered alert path correct when an EVM network replaces recently indexed blocks.
 
 ## MVP Completion Checklist
 
@@ -656,9 +663,9 @@ This will complete the user-visible alert path from an indexed ERC-20 log to a v
 - [x] Watchlist projection in the Notification service.
 - [x] Incoming, outgoing, and self-transfer address matching.
 - [x] Notification persistence and deduplication.
-- [ ] Explorer-linked Telegram rendering.
-- [ ] Global and per-chat rate limiting.
-- [ ] Retry and dead-letter handling.
+- [x] Explorer-linked Telegram rendering.
+- [x] Global and per-chat rate limiting.
+- [x] Retry and dead-letter handling.
 - [ ] Orphaned-transfer correction behavior.
 
 ### Platform and Quality

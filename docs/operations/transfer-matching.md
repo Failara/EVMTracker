@@ -28,7 +28,7 @@ The database also enforces a unique constraint over those four source fields. In
 
 The inbox handles ordinary broker redelivery. The stable identity and unique index also reject an equivalent transfer that arrives with a different event ID.
 
-The Notification outbox dispatcher remains disabled until Phase 8 declares the Telegram Gateway's durable delivery queue. This prevents broker-confirmed but unroutable delivery requests from being lost between implementation phases.
+The Notification outbox dispatcher is active because Telegram Gateway now declares the durable `telegram-delivery` queue. Pending delivery requests publish through the transactional outbox and are tracked in the gateway's delivery ledger.
 
 ## Token amounts
 

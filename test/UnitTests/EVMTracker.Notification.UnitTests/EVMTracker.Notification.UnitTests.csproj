@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../../src/Services/Notification/EVMTracker.Notification.Application/EVMTracker.Notification.Application.csproj" />
     <ProjectReference Include="../../../src/Services/Notification/EVMTracker.Notification.Domain/EVMTracker.Notification.Domain.csproj" />
   </ItemGroup>
 

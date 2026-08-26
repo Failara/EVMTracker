@@ -39,7 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IWatchlistProjectionStore, WatchlistProjectionStore>();
         services.AddScoped<ITransferNotificationStore, TransferNotificationStore>();
         services.AddScoped<IOutboxBatchStore, NotificationOutboxBatchStore>();
-        services.AddSingleton<INetworkDisplayNameResolver, ConfiguredNetworkDisplayNameResolver>();
+        services.AddSingleton<INetworkPresentationResolver, ConfiguredNetworkPresentationResolver>();
         services.AddRabbitMqMessaging(
             configuration,
             registration =>
@@ -94,7 +94,14 @@ public static class DependencyInjection
     private static bool IsValid(NotificationNetworkCatalogOptions options) =>
         options.Networks.Length > 0 &&
         options.Networks.All(network =>
-            network.ChainId > 0 && !string.IsNullOrWhiteSpace(network.DisplayName)) &&
+            network.ChainId > 0 &&
+            !string.IsNullOrWhiteSpace(network.DisplayName) &&
+            IsValidExplorerBaseUrl(network.ExplorerBaseUrl)) &&
         options.Networks.Select(network => network.ChainId).Distinct().Count() ==
         options.Networks.Length;
+
+    private static bool IsValidExplorerBaseUrl(string? explorerBaseUrl) =>
+        string.IsNullOrWhiteSpace(explorerBaseUrl) ||
+        (Uri.TryCreate(explorerBaseUrl, UriKind.Absolute, out Uri? uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps));
 }

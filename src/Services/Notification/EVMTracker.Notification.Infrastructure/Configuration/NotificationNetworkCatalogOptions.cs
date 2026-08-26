@@ -12,4 +12,6 @@ public sealed class NotificationNetworkOptions
     public long ChainId { get; init; }
 
     public string DisplayName { get; init; } = string.Empty;
+
+    public string? ExplorerBaseUrl { get; init; }
 }

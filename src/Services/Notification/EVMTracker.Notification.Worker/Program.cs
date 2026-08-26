@@ -1,3 +1,4 @@
+using EVMTracker.Messaging;
 using EVMTracker.Notification.Application;
 using EVMTracker.Notification.Infrastructure;
 using EVMTracker.Observability;
@@ -12,6 +13,7 @@ string connectionString = builder.Configuration.GetConnectionString("Notificatio
 builder.Services.AddNotificationInfrastructure(
     builder.Configuration,
     connectionString);
+builder.Services.AddOutboxDispatcher(builder.Configuration);
 
 var app = builder.Build();
 

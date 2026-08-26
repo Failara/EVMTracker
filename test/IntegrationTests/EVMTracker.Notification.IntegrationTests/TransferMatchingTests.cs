@@ -1,4 +1,6 @@
+using System.Text.Json;
 using EVMTracker.Contracts;
+using EVMTracker.Contracts.Notifications;
 using EVMTracker.Contracts.Transfers;
 using EVMTracker.Contracts.Watchlists;
 using EVMTracker.Messaging.Publishing;
@@ -13,6 +15,9 @@ namespace EVMTracker.Notification.IntegrationTests;
 
 public sealed class TransferMatchingTests
 {
+    private static readonly JsonSerializerOptions SerializerOptions =
+        new(JsonSerializerDefaults.Web);
+
     private const string MonitoredAddress =
         "0x2222222222222222222222222222222222222222";
     private const string OtherAddress =
@@ -45,6 +50,16 @@ public sealed class TransferMatchingTests
         var outbox = await database.Context.OutboxMessages.SingleAsync();
         Assert.Equal("notifications.telegram-delivery-requested.v1", outbox.EventType);
         Assert.Equal(notification.SourceEventId, outbox.CausationId);
+        TelegramDeliveryRequestedV1 delivery = JsonSerializer.Deserialize<
+            TelegramDeliveryRequestedV1>(
+                outbox.Payload,
+                SerializerOptions)!;
+        Assert.Equal("HTML", delivery.ParseMode);
+        Assert.Contains(
+            "https://etherscan.io/tx/",
+            delivery.Message,
+            StringComparison.Ordinal);
+        Assert.Contains("Confirmed", delivery.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -196,9 +211,11 @@ public sealed class TransferMatchingTests
             envelope.Payload);
     }
 
-    private sealed class TestNetworkResolver : INetworkDisplayNameResolver
+    private sealed class TestNetworkResolver : INetworkPresentationResolver
     {
-        public string Resolve(long chainId) => chainId == 1 ? "Ethereum" : $"Chain {chainId}";
+        public NetworkPresentation Resolve(long chainId) => new(
+            chainId == 1 ? "Ethereum" : $"Chain {chainId}",
+            chainId == 1 ? "https://etherscan.io" : null);
     }
 
     private sealed class TestDatabase : IAsyncDisposable

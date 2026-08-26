@@ -10,7 +10,7 @@ namespace EVMTracker.Notification.Application.Transfers;
 public sealed class TransferEventProcessor(
     IWatchlistProjectionStore watchlistProjection,
     ITransferNotificationStore notificationStore,
-    INetworkDisplayNameResolver networkNames)
+    INetworkPresentationResolver networkPresentationResolver)
 {
     private static readonly JsonSerializerOptions SerializerOptions =
         new(JsonSerializerDefaults.Web);
@@ -31,6 +31,7 @@ public sealed class TransferEventProcessor(
         var prepared = new List<PreparedTransferNotification>(matches.Count);
         foreach (ProjectedWatchlistEntry match in matches)
         {
+            NetworkPresentation network = networkPresentationResolver.Resolve(transfer.ChainId);
             TransferDirection direction = ClassifyDirection(
                 match.Address,
                 transfer.FromAddress,
@@ -41,7 +42,7 @@ public sealed class TransferEventProcessor(
                 match.TelegramUserId,
                 match.TelegramChatId,
                 transfer.ChainId,
-                networkNames.Resolve(transfer.ChainId),
+                network.DisplayName,
                 match.Address,
                 match.Label,
                 direction,
@@ -62,8 +63,8 @@ public sealed class TransferEventProcessor(
                 envelope.OccurredAt,
                 notification.Id,
                 notification.TelegramChatId,
-                TransferNotificationRenderer.Render(notification),
-                "PlainText");
+                TransferNotificationRenderer.Render(notification, network.ExplorerBaseUrl),
+                "HTML");
             prepared.Add(new PreparedTransferNotification(notification, deliveryRequest));
         }
 

@@ -1,9 +1,15 @@
+using EVMTracker.Messaging;
 using EVMTracker.TelegramGateway.Application.Abstractions;
 using EVMTracker.TelegramGateway.Application.Commands;
+using EVMTracker.TelegramGateway.Application.Delivery;
 using EVMTracker.TelegramGateway.Infrastructure.Chains;
 using EVMTracker.TelegramGateway.Infrastructure.Configuration;
+using EVMTracker.TelegramGateway.Infrastructure.Messaging;
+using EVMTracker.TelegramGateway.Infrastructure.Persistence;
 using EVMTracker.TelegramGateway.Infrastructure.Telegram;
 using EVMTracker.TelegramGateway.Infrastructure.Watchlists;
+using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -17,6 +23,11 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        ArgumentNullException.ThrowIfNull(configuration);
+        string connectionString = configuration.GetConnectionString("TelegramGateway")
+            ?? throw new InvalidOperationException(
+                "The ConnectionStrings:TelegramGateway setting is required.");
+
         services.AddOptions<TelegramBotOptions>()
             .Bind(configuration.GetSection(TelegramBotOptions.SectionName))
             .Validate(
@@ -49,6 +60,17 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(SupportedNetworksOptions.SectionName))
             .Validate(AreValidNetworks, "SupportedNetworks contains invalid or duplicate entries.")
             .ValidateOnStart();
+        services.AddOptions<TelegramDeliveryOptions>()
+            .Bind(configuration.GetSection(TelegramDeliveryOptions.SectionName))
+            .Validate(IsValid, "TelegramDelivery configuration is invalid.")
+            .ValidateOnStart();
+
+        services.AddDbContext<TelegramGatewayDbContext>(options =>
+            options.UseNpgsql(
+                connectionString,
+                postgres => postgres.MigrationsHistoryTable(
+                    "__ef_migrations_history",
+                    "telegram_gateway")));
 
         services.AddSingleton<IChainCatalog>(serviceProvider =>
         {
@@ -63,6 +85,11 @@ public static class DependencyInjection
                         network.ChainId)));
         });
         services.AddSingleton<TelegramCommandService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ITelegramDeliveryRateLimiter, TelegramDeliveryRateLimiter>();
+        services.AddSingleton<IDeliveryDelay, SystemDeliveryDelay>();
+        services.AddScoped<ITelegramDeliveryStore, TelegramDeliveryStore>();
+        services.AddScoped<TelegramDeliveryProcessor>();
 
         services.AddHttpClient<IWatchlistClient, WatchlistApiClient>(
             (serviceProvider, client) =>
@@ -85,6 +112,37 @@ public static class DependencyInjection
                 .Value;
             return new TelegramBotClient(botOptions.BotToken);
         });
+        services.AddSingleton<ITelegramMessageSender, TelegramMessageSender>();
+        services.AddSingleton(serviceProvider =>
+        {
+            TelegramDeliveryOptions deliveryOptions = serviceProvider
+                .GetRequiredService<IOptions<TelegramDeliveryOptions>>()
+                .Value;
+            return new TelegramDeliveryPolicy(
+                deliveryOptions.MaximumAttempts,
+                deliveryOptions.InitialRetryDelay,
+                deliveryOptions.MaximumRetryDelay,
+                deliveryOptions.JitterFactor);
+        });
+        services.AddRabbitMqMessaging(
+            configuration,
+            registration => registration.AddConsumer<TelegramDeliveryConsumer>(),
+            (broker, context, _) =>
+            {
+                TelegramDeliveryOptions deliveryOptions = context.GetRequiredService<
+                    IOptions<TelegramDeliveryOptions>>().Value;
+                broker.ReceiveEndpoint(
+                    deliveryOptions.QueueName,
+                    endpoint =>
+                    {
+                        endpoint.Durable = true;
+                        endpoint.AutoDelete = false;
+                        endpoint.PrefetchCount = deliveryOptions.PrefetchCount;
+                        endpoint.ConcurrentMessageLimit =
+                            deliveryOptions.ConcurrentMessageLimit;
+                        endpoint.ConfigureConsumer<TelegramDeliveryConsumer>(context);
+                    });
+            });
         services.AddHostedService<TelegramPollingWorker>();
 
         return services;
@@ -123,4 +181,15 @@ public static class DependencyInjection
 
         return valuesAreValid && namesAreUnique && chainIdsAreUnique;
     }
+
+    private static bool IsValid(TelegramDeliveryOptions options) =>
+        !string.IsNullOrWhiteSpace(options.QueueName) &&
+        options.PrefetchCount > 0 &&
+        options.ConcurrentMessageLimit > 0 &&
+        options.MaximumAttempts > 0 &&
+        options.InitialRetryDelay > TimeSpan.Zero &&
+        options.MaximumRetryDelay >= options.InitialRetryDelay &&
+        options.JitterFactor is >= 0 and <= 1 &&
+        options.GlobalMessagesPerSecond > 0 &&
+        options.PerChatMessagesPerSecond > 0;
 }

@@ -37,6 +37,18 @@ public sealed class ContractCompatibilityTests
         "trackedAddressId",
     ];
 
+    private static readonly string[] TelegramDeliveryProperties =
+    [
+        "eventId",
+        "eventType",
+        "eventVersion",
+        "message",
+        "notificationId",
+        "occurredAtUtc",
+        "parseMode",
+        "telegramChatId",
+    ];
+
     private static readonly DateTimeOffset OccurredAt =
         new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
 
@@ -104,5 +116,27 @@ public sealed class ContractCompatibilityTests
             .Order(StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(AddressAddedProperties, properties);
+    }
+
+    [Fact]
+    public void TelegramDeliveryPayloadKeepsRequiredWireFields()
+    {
+        Guid eventId = Guid.NewGuid();
+        var integrationEvent = new TelegramDeliveryRequestedV1(
+            eventId,
+            OccurredAt,
+            Guid.NewGuid(),
+            84,
+            "<b>Incoming transfer</b>",
+            "HTML");
+        JsonElement payload = JsonSerializer.SerializeToElement(
+            integrationEvent,
+            SerializerOptions);
+
+        string[] properties = payload.EnumerateObject()
+            .Select(property => property.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(TelegramDeliveryProperties, properties);
     }
 }
