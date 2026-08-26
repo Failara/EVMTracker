@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 and 2 are complete. The repository has a buildable .NET 10 microservice foundation and a tested Watchlist domain model. Persistence and application use cases begin in Phase 3.
+The short version: Phases 1 through 3 are complete. The repository has a buildable .NET 10 microservice foundation, a tested Watchlist domain model, and durable Watchlist use cases exposed through a REST API. Telegram command handling begins in Phase 4.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 2 completed and verified; Phase 3 is the next implementation step.
+**Status:** Phase 3 completed and verified; Phase 4 is the next implementation step.
 
 ## Current State
 
@@ -23,14 +23,17 @@ The repository currently contains:
 - Accepted ADRs for service boundaries, PostgreSQL data ownership, RabbitMQ delivery, and EVM log acquisition.
 - A Watchlist domain model containing EIP-55 `Address`, `ChainId`, `TrackedAddress`, domain errors/results, and duplicate-subscription policy.
 - Watchlist domain tests covering address checksums, aggregate ownership, labels, networks, removal, and duplicate tracking rules.
+- MediatR commands, queries, and handlers for adding, listing, updating, and removing tracked addresses.
+- EF Core PostgreSQL persistence with an initial migration and a unique user/address/network constraint.
+- A transactional outbox that stores versioned Watchlist lifecycle events in the same database transaction as aggregate changes.
+- Watchlist REST endpoints for add, list, update, and remove operations.
+- Watchlist application and persistence integration tests, including duplicate enforcement and aggregate/outbox atomicity.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Watchlist persistence and application use cases.
 - Telegram bot command handling.
-- Watchlist persistence.
 - EVM block and ERC-20 log indexing.
 - Address-to-transfer matching.
 - Reliable notification delivery.
@@ -277,28 +280,30 @@ Recommended tests:
 
 ## Phase 3: Implement Watchlist Persistence and Use Cases
 
+Status: implemented and verified.
+
 Goal: make watchlist management durable and accessible to other adapters.
 
 Tasks:
 
-- Add `ITrackedAddressRepository` to the application layer.
-- Add MediatR commands and queries:
+- [x] Add `ITrackedAddressRepository` to the application layer.
+- [x] Add MediatR commands and queries:
   - `AddTrackedAddressCommand`
   - `RemoveTrackedAddressCommand`
   - `ListTrackedAddressesQuery`
   - `UpdateTrackedAddressCommand`
-- Add EF Core mappings and migrations.
-- Add a database-level unique constraint for user, chain, and normalized address.
-- Add REST endpoints to the Watchlist API.
-- Add a transactional outbox for watchlist lifecycle events.
-- Publish versioned `AddressAdded`, `AddressUpdated`, and `AddressRemoved` integration events.
+- [x] Add EF Core mappings and migrations.
+- [x] Add a database-level unique constraint for user, chain, and normalized address.
+- [x] Add REST endpoints to the Watchlist API.
+- [x] Add a transactional outbox for watchlist lifecycle events.
+- [x] Record versioned `AddressAdded`, `AddressUpdated`, and `AddressRemoved` integration events in the outbox. RabbitMQ dispatch is implemented in Phase 6.
 
 Recommended tests:
 
-- Repository can save and load a tracked address.
-- Duplicate records are rejected consistently.
-- List returns only the requesting user's records.
-- Database change and outbox event are committed atomically.
+- [x] Repository can save and load a tracked address.
+- [x] Duplicate records are rejected consistently.
+- [x] List returns only the requesting user's records.
+- [x] Database change and outbox event are committed atomically.
 
 ## Phase 4: Implement Telegram Commands
 
@@ -565,15 +570,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 3, Watchlist persistence and application use cases:
+The best next implementation step is Phase 4, Telegram command handling:
 
-1. Define `ITrackedAddressRepository` and application-layer transaction abstractions.
-2. Add commands, queries, handlers, validation, and application DTOs.
-3. Add EF Core PostgreSQL mappings and an initial migration.
-4. Enforce duplicate user/address/network subscriptions through the domain policy and repository data.
-5. Add a transactional outbox and Watchlist API endpoints.
+1. Add Telegram Bot API configuration and startup validation.
+2. Implement long polling for local development with cancellation and error handling.
+3. Parse `/start`, `/help`, `/add`, `/list`, `/remove`, and `/status` commands.
+4. Call the Watchlist API through a typed HTTP client and map errors to friendly Telegram replies.
+5. Add parser, routing, and adapter tests without contacting Telegram or PostgreSQL.
 
-This will turn the Phase 2 domain model into durable behavior that the Telegram gateway can call in Phase 4.
+This will connect real Telegram users to the durable Watchlist behavior completed in Phase 3.
 
 ## MVP Completion Checklist
 
@@ -591,10 +596,10 @@ This will turn the Phase 2 domain model into durable behavior that the Telegram 
 - [x] `Address` and `ChainId` value objects.
 - [x] `TrackedAddress` aggregate.
 - [x] Domain result/error primitives and duplicate-subscription policy.
-- [ ] EF Core database context and migrations.
-- [ ] Watchlist commands and queries.
-- [ ] Watchlist REST API.
-- [ ] Transactional watchlist outbox.
+- [x] EF Core database context and migrations.
+- [x] Watchlist commands and queries.
+- [x] Watchlist REST API.
+- [x] Transactional watchlist outbox.
 - [ ] Telegram `/add`, `/list`, `/remove`, and `/status` commands.
 
 ### EVM Monitoring
@@ -628,8 +633,10 @@ This will turn the Phase 2 domain model into durable behavior that the Telegram 
 - [x] Architecture boundary tests.
 - [x] Unit-test project scaffolds.
 - [x] Watchlist domain unit tests.
+- [x] Watchlist application handler tests.
+- [x] Watchlist persistence integration tests.
 - [ ] Unit tests for remaining MVP business behavior.
-- [ ] Integration and contract tests.
+- [ ] Integration and contract tests for the remaining services.
 - [ ] End-to-end test with Anvil.
 - [ ] Resilience and performance tests.
 - [ ] Deployment and operations documentation.

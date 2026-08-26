@@ -7,6 +7,7 @@ The repository is currently in Phase 1: solution and architecture foundation. Se
 ## Prerequisites
 
 - .NET SDK 10.0.400 or a compatible 10.0 patch selected by `global.json`.
+- PostgreSQL for running the Watchlist API against persistent storage.
 
 ## Build and test
 
@@ -15,6 +16,24 @@ dotnet restore EVMTracker.sln --configfile NuGet.Config
 dotnet build EVMTracker.sln --configuration Release --no-restore
 dotnet test EVMTracker.sln --configuration Release --no-build
 ```
+
+## Watchlist database
+
+Configure `ConnectionStrings__Watchlist` through an environment variable or user secrets. The checked-in connection string contains no password.
+
+Restore the local EF tool and apply migrations with:
+
+```powershell
+dotnet tool restore --configfile NuGet.Config
+dotnet tool run dotnet-ef database update --project src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure --startup-project src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure --context WatchlistDbContext
+```
+
+The Watchlist API exposes:
+
+- `POST /api/watchlist`
+- `GET /api/watchlist/users/{telegramUserId}`
+- `PUT /api/watchlist/{trackedAddressId}`
+- `DELETE /api/watchlist/{trackedAddressId}?telegramUserId={telegramUserId}`
 
 ## Service hosts
 

@@ -1,12 +1,22 @@
 using EVMTracker.Observability;
+using EVMTracker.Watchlist.Api.Endpoints;
+using EVMTracker.Watchlist.Application;
+using EVMTracker.Watchlist.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddServiceDefaults();
+builder.Services.AddWatchlistApplication();
+
+string connectionString = builder.Configuration.GetConnectionString("Watchlist")
+    ?? throw new InvalidOperationException(
+        "The ConnectionStrings:Watchlist setting is required.");
+builder.Services.AddWatchlistInfrastructure(connectionString);
 
 var app = builder.Build();
 
 app.MapServiceDefaults();
+app.MapWatchlistEndpoints();
 app.MapGet(
     "/",
     () => Results.Ok(

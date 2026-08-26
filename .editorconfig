@@ -23,3 +23,7 @@ dotnet_style_qualification_for_event = false:suggestion
 [*.{csproj,props,targets,xml,yml,yaml,json,md}]
 indent_style = space
 indent_size = 2
+
+[src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure/Persistence/Migrations/*.cs]
+# EF Core migrations are generated source; constant arrays are emitted by the tooling.
+dotnet_diagnostic.CA1861.severity = none

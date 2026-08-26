@@ -2,6 +2,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EVMTracker.Watchlist.Domain\EVMTracker.Watchlist.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\EVMTracker.Contracts\EVMTracker.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
   </ItemGroup>
 
   <PropertyGroup>

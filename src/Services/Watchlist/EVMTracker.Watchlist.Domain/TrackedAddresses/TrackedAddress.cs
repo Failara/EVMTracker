@@ -16,7 +16,8 @@ public sealed class TrackedAddress
         long telegramChatId,
         string? label,
         IEnumerable<ChainId> enabledNetworks,
-        DateTimeOffset createdAtUtc)
+        DateTimeOffset createdAtUtc,
+        bool isActive)
     {
         Id = id;
         Address = address;
@@ -24,7 +25,7 @@ public sealed class TrackedAddress
         TelegramChatId = telegramChatId;
         Label = label;
         _enabledNetworks = [.. enabledNetworks];
-        IsActive = true;
+        IsActive = isActive;
         CreatedAtUtc = createdAtUtc;
     }
 
@@ -96,8 +97,28 @@ public sealed class TrackedAddress
                 resolvedTelegramChatId,
                 labelResult.Value,
                 uniqueNetworks,
-                DateTimeOffset.UtcNow));
+                DateTimeOffset.UtcNow,
+                true));
     }
+
+    internal static TrackedAddress Rehydrate(
+        Guid id,
+        Address address,
+        long telegramUserId,
+        long telegramChatId,
+        string? label,
+        IEnumerable<ChainId> enabledNetworks,
+        DateTimeOffset createdAtUtc,
+        bool isActive) =>
+        new(
+            id,
+            address,
+            telegramUserId,
+            telegramChatId,
+            label,
+            enabledNetworks,
+            createdAtUtc,
+            isActive);
 
     public Result Rename(long requestingTelegramUserId, string? label)
     {

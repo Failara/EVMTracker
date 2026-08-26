@@ -12,6 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../../src/BuildingBlocks/EVMTracker.Contracts/EVMTracker.Contracts.csproj" />
+    <ProjectReference Include="../../../src/Services/Watchlist/EVMTracker.Watchlist.Application/EVMTracker.Watchlist.Application.csproj" />
     <ProjectReference Include="../../../src/Services/Watchlist/EVMTracker.Watchlist.Domain/EVMTracker.Watchlist.Domain.csproj" />
   </ItemGroup>
 
