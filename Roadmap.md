@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phase 1 is complete. The repository has a buildable and tested .NET 10 microservice foundation. Business behavior begins in Phase 2 with the Watchlist domain model.
+The short version: Phases 1 and 2 are complete. The repository has a buildable .NET 10 microservice foundation and a tested Watchlist domain model. Persistence and application use cases begin in Phase 3.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 1 completed and verified; Phase 2 is the next implementation step.
+**Status:** Phase 2 completed and verified; Phase 3 is the next implementation step.
 
 ## Current State
 
@@ -21,12 +21,14 @@ The repository currently contains:
 - Four service unit-test projects and an architecture-test project that enforces dependency boundaries.
 - A CI workflow for restore, formatting verification, Release build, and tests.
 - Accepted ADRs for service boundaries, PostgreSQL data ownership, RabbitMQ delivery, and EVM log acquisition.
+- A Watchlist domain model containing EIP-55 `Address`, `ChainId`, `TrackedAddress`, domain errors/results, and duplicate-subscription policy.
+- Watchlist domain tests covering address checksums, aggregate ownership, labels, networks, removal, and duplicate tracking rules.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Domain models and application use cases.
+- Watchlist persistence and application use cases.
 - Telegram bot command handling.
 - Watchlist persistence.
 - EVM block and ERC-20 log indexing.
@@ -250,13 +252,13 @@ Goal: represent the rules for monitoring user-owned EVM addresses.
 
 Tasks:
 
-- Add an `Address` value object with hexadecimal validation and EIP-55 normalization.
-- Add a `ChainId` value object.
-- Add the `TrackedAddress` aggregate root.
-- Store the Telegram user/chat reference, label, enabled networks, status, and creation time.
-- Prevent one user from tracking the same address twice on the same network.
-- Add methods to rename, enable, disable, and remove a tracked address.
-- Add `Result` and `Result<T>` primitives for expected business failures if the chosen application style requires them.
+- [x] Add an `Address` value object with hexadecimal validation and EIP-55 normalization.
+- [x] Add a `ChainId` value object.
+- [x] Add the `TrackedAddress` aggregate root.
+- [x] Store the Telegram user/chat reference, label, enabled networks, status, and creation time.
+- [x] Prevent one user from tracking the same address twice on the same network.
+- [x] Add methods to rename, enable, disable, and remove a tracked address.
+- [x] Add `Result` and `Result<T>` primitives for expected business failures.
 
 Design notes:
 
@@ -267,11 +269,11 @@ Design notes:
 
 Recommended tests:
 
-- Valid lowercase and checksummed addresses normalize to one value.
-- Malformed or incorrectly sized addresses fail.
-- Duplicate watchlist entries fail.
-- A user cannot change or remove another user's entry.
-- Enabling or disabling networks preserves aggregate invariants.
+- [x] Valid lowercase and checksummed addresses normalize to one value.
+- [x] Malformed or incorrectly sized addresses fail.
+- [x] Duplicate watchlist entries fail.
+- [x] A user cannot change or remove another user's entry.
+- [x] Enabling or disabling networks preserves aggregate invariants.
 
 ## Phase 3: Implement Watchlist Persistence and Use Cases
 
@@ -563,15 +565,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 2, the Watchlist domain model:
+The best next implementation step is Phase 3, Watchlist persistence and application use cases:
 
-1. Implement the `Address` value object with hexadecimal validation and EIP-55 normalization.
-2. Implement the `ChainId` value object.
-3. Implement the `TrackedAddress` aggregate and its invariants.
-4. Add the result/error primitives needed for expected domain failures.
-5. Replace the Watchlist smoke test with focused domain tests.
+1. Define `ITrackedAddressRepository` and application-layer transaction abstractions.
+2. Add commands, queries, handlers, validation, and application DTOs.
+3. Add EF Core PostgreSQL mappings and an initial migration.
+4. Enforce duplicate user/address/network subscriptions through the domain policy and repository data.
+5. Add a transactional outbox and Watchlist API endpoints.
 
-This creates the business model that persistence, commands, and Telegram input will use in later phases.
+This will turn the Phase 2 domain model into durable behavior that the Telegram gateway can call in Phase 4.
 
 ## MVP Completion Checklist
 
@@ -586,8 +588,9 @@ This creates the business model that persistence, commands, and Telegram input w
 
 ### Watchlist Management
 
-- [ ] `Address` and `ChainId` value objects.
-- [ ] `TrackedAddress` aggregate.
+- [x] `Address` and `ChainId` value objects.
+- [x] `TrackedAddress` aggregate.
+- [x] Domain result/error primitives and duplicate-subscription policy.
 - [ ] EF Core database context and migrations.
 - [ ] Watchlist commands and queries.
 - [ ] Watchlist REST API.
@@ -624,7 +627,8 @@ This creates the business model that persistence, commands, and Telegram input w
 - [x] CI build and test workflow.
 - [x] Architecture boundary tests.
 - [x] Unit-test project scaffolds.
-- [ ] Unit tests for MVP business behavior.
+- [x] Watchlist domain unit tests.
+- [ ] Unit tests for remaining MVP business behavior.
 - [ ] Integration and contract tests.
 - [ ] End-to-end test with Anvil.
 - [ ] Resilience and performance tests.
