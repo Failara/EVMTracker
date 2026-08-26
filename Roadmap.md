@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 6 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, RabbitMQ outbox dispatch, and an idempotent Notification-owned Watchlist projection. Transfer matching begins in Phase 7.
+The short version: Phases 1 through 7 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, RabbitMQ outbox dispatch, an idempotent Watchlist projection, and durable ERC-20 transfer matching. Telegram rendering and delivery begin in Phase 8.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 6 completed and verified; Phase 7 is the next implementation step.
+**Status:** Phase 7 completed and verified; Phase 8 is the next implementation step.
 
 ## Current State
 
@@ -46,14 +46,19 @@ The repository currently contains:
 - An idempotent Notification Watchlist projection with an atomic inbox and service-owned PostgreSQL schema.
 - Event-stream replay through the Watchlist API without cross-service database reads.
 - Contract compatibility and Notification projection integration tests.
+- A durable transfer-matcher queue that compares both ERC-20 participants with the local Watchlist projection.
+- Incoming, outgoing, and self-transfer classification for every matching subscription.
+- Exact raw-token conversion using ERC-20 decimals without floating-point arithmetic.
+- Stable logical notification identities and a database uniqueness constraint for duplicate defense.
+- Atomic notification, delivery-outbox, and transfer-inbox persistence.
+- Configurable network display names with a safe chain-ID fallback.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Address-to-transfer matching.
 - Reliable notification delivery.
-- Idempotency and chain-reorganization handling.
+- Chain-reorganization correction handling.
 - Full telemetry, operational dashboards, and alerts beyond the baseline health endpoints.
 - Docker and deployment configuration.
 - Business unit, integration, contract, resilience, and performance tests.
@@ -419,26 +424,34 @@ Recommended tests:
 
 ## Phase 7: Match ERC-20 Transfers
 
+Status: implemented and verified.
+
 Goal: create one logical notification for every relevant transfer and subscription.
 
 Tasks:
 
-- Compare both normalized `from` and `to` addresses with the local watchlist projection.
-- Classify matches as incoming, outgoing, or self-transfer.
-- Support multiple users monitoring the same address.
-- Resolve the matching label and network display information.
-- Convert the raw token value using token decimals.
-- Create a stable notification identity from subscription ID, chain ID, transaction hash, and log index.
-- Persist the notification before publishing a Telegram delivery request.
-- Do not require a USD price feed for the initial ERC-20 monitoring MVP.
+- [x] Compare both normalized `from` and `to` addresses with the local watchlist projection.
+- [x] Classify matches as incoming, outgoing, or self-transfer.
+- [x] Support multiple users monitoring the same address.
+- [x] Resolve the matching label and network display information.
+- [x] Convert the raw token value using token decimals.
+- [x] Create a stable notification identity from subscription ID, chain ID, transaction hash, and log index.
+- [x] Persist the notification before publishing a Telegram delivery request.
+- [x] Do not require a USD price feed for the initial ERC-20 monitoring MVP.
+
+Design note:
+
+Notification persistence uses two idempotency levels. The transfer inbox rejects repeated broker delivery by source `EventId`, while the unique logical identity rejects an equivalent transfer published under another event ID. Notification state, the Telegram delivery-request outbox row, and the inbox marker commit in one database transaction.
+
+The Notification outbox dispatcher is intentionally activated in Phase 8, after the Telegram Gateway declares its durable delivery queue. Until then, delivery requests remain safely pending in PostgreSQL rather than being published to an unroutable exchange.
 
 Recommended tests:
 
-- A match occurs when the monitored address appears in `topic1`.
-- A match occurs when the monitored address appears in `topic2`.
-- An unrelated Transfer log is ignored.
-- Multiple subscriptions produce separate user notifications.
-- Duplicate broker delivery does not create duplicate logical notifications.
+- [x] A match occurs when the monitored address appears in `topic1`.
+- [x] A match occurs when the monitored address appears in `topic2`.
+- [x] An unrelated Transfer log is ignored.
+- [x] Multiple subscriptions produce separate user notifications.
+- [x] Duplicate broker delivery does not create duplicate logical notifications.
 
 ## Phase 8: Render and Dispatch Telegram Notifications
 
@@ -595,15 +608,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 7, ERC-20 transfer matching:
+The best next implementation step is Phase 8, Telegram rendering and delivery:
 
-1. Consume transfer envelopes in the Notification service.
-2. Match normalized `from` and `to` participants against the local projection.
-3. Classify incoming, outgoing, and self-transfer activity.
-4. Persist stable, deduplicated notification records.
-5. Record Telegram delivery requests through a Notification transactional outbox.
+1. Consume Telegram delivery requests in the gateway.
+2. Render explorer-linked, escaped mobile-friendly messages.
+3. Add global and per-chat rate limiting.
+4. Respect Telegram `RetryAfter` and retry transient failures with jitter.
+5. Persist delivery attempts and terminal delivery status.
 
-This will turn the independent Watchlist and indexer streams into durable logical notifications while preserving at-least-once correctness.
+This will complete the user-visible alert path from an indexed ERC-20 log to a verifiable Telegram message.
 
 ## MVP Completion Checklist
 
@@ -641,8 +654,8 @@ This will turn the independent Watchlist and indexer streams into durable logica
 ### Notifications
 
 - [x] Watchlist projection in the Notification service.
-- [ ] Incoming and outgoing address matching.
-- [ ] Notification persistence and deduplication.
+- [x] Incoming, outgoing, and self-transfer address matching.
+- [x] Notification persistence and deduplication.
 - [ ] Explorer-linked Telegram rendering.
 - [ ] Global and per-chat rate limiting.
 - [ ] Retry and dead-letter handling.

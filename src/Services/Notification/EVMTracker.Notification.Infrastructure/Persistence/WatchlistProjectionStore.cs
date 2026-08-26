@@ -82,7 +82,9 @@ internal sealed class WatchlistProjectionStore(NotificationDbContext dbContext)
             await dbContext.WatchlistProjection.ToArrayAsync(cancellationToken)
                 .ConfigureAwait(false));
         dbContext.InboxMessages.RemoveRange(
-            await dbContext.InboxMessages.ToArrayAsync(cancellationToken).ConfigureAwait(false));
+            await dbContext.InboxMessages
+                .Where(message => message.EventType.StartsWith("watchlist."))
+                .ToArrayAsync(cancellationToken).ConfigureAwait(false));
         AddInbox(eventId, integrationEvent.EventType, occurredAt);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -103,6 +105,31 @@ internal sealed class WatchlistProjectionStore(NotificationDbContext dbContext)
                 record.Label,
                 record.UpdatedAtUtc))
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<ProjectedWatchlistEntry>> FindMatchesAsync(
+        long chainId,
+        string fromAddress,
+        string toAddress,
+        CancellationToken cancellationToken)
+    {
+        string normalizedFrom = fromAddress.ToLowerInvariant();
+        string normalizedTo = toAddress.ToLowerInvariant();
+        return await dbContext.WatchlistProjection
+            .AsNoTracking()
+            .Where(record =>
+                record.ChainId == chainId &&
+                (record.Address == normalizedFrom || record.Address == normalizedTo))
+            .OrderBy(record => record.TrackedAddressId)
+            .Select(record => new ProjectedWatchlistEntry(
+                record.TrackedAddressId,
+                record.ChainId,
+                record.TelegramUserId,
+                record.TelegramChatId,
+                record.Address,
+                record.Label,
+                record.UpdatedAtUtc))
+            .ToArrayAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     private async Task ReplaceAsync(
         Guid eventId,

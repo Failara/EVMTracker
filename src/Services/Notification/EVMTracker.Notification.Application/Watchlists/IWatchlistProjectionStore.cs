@@ -30,4 +30,10 @@ public interface IWatchlistProjectionStore
 
     Task<IReadOnlyList<ProjectedWatchlistEntry>> ListAsync(
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ProjectedWatchlistEntry>> FindMatchesAsync(
+        long chainId,
+        string fromAddress,
+        string toAddress,
+        CancellationToken cancellationToken);
 }

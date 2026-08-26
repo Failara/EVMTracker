@@ -2,7 +2,7 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 6 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, and the Notification service's idempotent Watchlist projection. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 7 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, an idempotent Watchlist projection, and durable ERC-20 transfer matching. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
 
 ## Prerequisites
 
@@ -112,6 +112,22 @@ dotnet run --project src/Services/Notification/EVMTracker.Notification.Worker
 ```
 
 To rebuild the Notification projection exclusively from retained integration events, call `POST /api/watchlist/events/replay`. The Watchlist service publishes a reset marker followed by its ordered lifecycle-event history; the Notification service never reads the Watchlist database.
+
+## ERC-20 transfer matching
+
+The Notification worker consumes confirmed transfer envelopes from `notification-transfer-matcher`. It queries only its local Watchlist projection and compares both normalized participants:
+
+- monitored recipient: incoming;
+- monitored sender: outgoing;
+- monitored sender and recipient: self-transfer.
+
+Each matching subscription creates its own notification, so several users may monitor the same address independently. Raw token values are converted with integer arithmetic and the event's token decimals; missing decimals leave the raw value intact.
+
+The logical notification ID is deterministic over subscription ID, chain ID, transaction hash, and log index. A matching database uniqueness constraint provides a second duplicate-defense layer beyond the consumed-event inbox. The notification, `TelegramDeliveryRequestedV1` outbox row, and inbox marker commit atomically.
+
+The Notification outbox dispatcher is enabled in Phase 8 together with the Telegram Gateway's durable delivery queue. Before then, generated delivery requests remain pending in PostgreSQL so RabbitMQ cannot acknowledge and discard an unroutable request.
+
+Network display names are configured under `NotificationNetworks:Networks`. Unknown positive chain IDs use an `EVM chain <chainId>` fallback rather than rejecting an otherwise valid transfer.
 
 ## Service hosts
 

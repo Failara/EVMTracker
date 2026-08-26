@@ -45,6 +45,167 @@ namespace EVMTracker.Notification.Infrastructure.Persistence.Migrations
                     b.ToTable("inbox_messages", "notification");
                 });
 
+            modelBuilder.Entity("EVMTracker.Notification.Infrastructure.Persistence.Entities.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CausationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeadLetteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeliveryAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("EventVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc")
+                        .HasDatabaseName("ix_notification_outbox_pending");
+
+                    b.ToTable("outbox_messages", "notification");
+                });
+
+            modelBuilder.Entity("EVMTracker.Notification.Infrastructure.Persistence.Entities.TransferNotificationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BlockHash")
+                        .IsRequired()
+                        .HasMaxLength(66)
+                        .HasColumnType("character varying(66)");
+
+                    b.Property<long>("BlockNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ChainId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DisplayAmount")
+                        .IsRequired()
+                        .HasMaxLength(336)
+                        .HasColumnType("character varying(336)");
+
+                    b.Property<string>("FromAddress")
+                        .IsRequired()
+                        .HasMaxLength(42)
+                        .HasColumnType("character varying(42)");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("LogIndex")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MonitoredAddress")
+                        .IsRequired()
+                        .HasMaxLength(42)
+                        .HasColumnType("character varying(42)");
+
+                    b.Property<string>("NetworkName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RawValue")
+                        .IsRequired()
+                        .HasMaxLength(78)
+                        .HasColumnType("character varying(78)");
+
+                    b.Property<Guid>("SourceEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SubscriptionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("TelegramChatId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TelegramUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ToAddress")
+                        .IsRequired()
+                        .HasMaxLength(42)
+                        .HasColumnType("character varying(42)");
+
+                    b.Property<string>("TokenContract")
+                        .IsRequired()
+                        .HasMaxLength(42)
+                        .HasColumnType("character varying(42)");
+
+                    b.Property<int?>("TokenDecimals")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TokenName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("TokenSymbol")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TransactionHash")
+                        .IsRequired()
+                        .HasMaxLength(66)
+                        .HasColumnType("character varying(66)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceEventId")
+                        .HasDatabaseName("ix_transfer_notifications_source_event_id");
+
+                    b.HasIndex("SubscriptionId", "ChainId", "TransactionHash", "LogIndex")
+                        .IsUnique()
+                        .HasDatabaseName("ux_transfer_notifications_subscription_chain_transaction_log");
+
+                    b.ToTable("transfer_notifications", "notification");
+                });
+
             modelBuilder.Entity("EVMTracker.Notification.Infrastructure.Persistence.Entities.WatchlistProjectionRecord", b =>
                 {
                     b.Property<Guid>("TrackedAddressId")

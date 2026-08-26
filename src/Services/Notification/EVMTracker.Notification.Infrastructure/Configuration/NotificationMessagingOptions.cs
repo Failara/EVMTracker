@@ -7,6 +7,9 @@ public sealed class NotificationMessagingOptions
     public string WatchlistProjectionQueue { get; init; } =
         "notification-watchlist-projection";
 
+    public string TransferMatcherQueue { get; init; } =
+        "notification-transfer-matcher";
+
     public ushort PrefetchCount { get; init; } = 16;
 
     public TimeSpan[] RetryIntervals { get; init; } =

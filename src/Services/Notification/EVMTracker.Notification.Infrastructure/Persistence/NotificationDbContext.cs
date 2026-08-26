@@ -11,6 +11,11 @@ public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext
 
     internal DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
+    internal DbSet<TransferNotificationRecord> TransferNotifications =>
+        Set<TransferNotificationRecord>();
+
+    internal DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

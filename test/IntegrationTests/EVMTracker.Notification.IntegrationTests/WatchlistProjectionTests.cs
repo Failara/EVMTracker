@@ -3,6 +3,7 @@ using EVMTracker.Contracts.Watchlists;
 using EVMTracker.Messaging.Publishing;
 using EVMTracker.Notification.Application.Watchlists;
 using EVMTracker.Notification.Infrastructure.Persistence;
+using EVMTracker.Notification.Infrastructure.Persistence.Entities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -66,6 +67,15 @@ public sealed class WatchlistProjectionTests
 
         ProjectedWatchlistEntry[] expected =
             (await store.ListAsync(CancellationToken.None)).ToArray();
+        Guid transferInboxId = Guid.NewGuid();
+        database.Context.InboxMessages.Add(
+            new InboxMessage
+            {
+                EventId = transferInboxId,
+                EventType = "transfers.erc20-observed.v1",
+                ProcessedAtUtc = OccurredAt,
+            });
+        await database.Context.SaveChangesAsync();
         var reset = new WatchlistProjectionResetV1(
             Guid.NewGuid(),
             OccurredAt.AddMinutes(3),
@@ -77,6 +87,9 @@ public sealed class WatchlistProjectionTests
         }
 
         Assert.Equal(expected, (await store.ListAsync(CancellationToken.None)).ToArray());
+        Assert.True(
+            await database.Context.InboxMessages.AnyAsync(
+                message => message.EventId == transferInboxId));
     }
 
     [Fact]

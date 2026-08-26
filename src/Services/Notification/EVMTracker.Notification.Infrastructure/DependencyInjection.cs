@@ -1,4 +1,5 @@
 using EVMTracker.Messaging;
+using EVMTracker.Notification.Application.Transfers;
 using EVMTracker.Notification.Application.Watchlists;
 using EVMTracker.Notification.Infrastructure.Configuration;
 using EVMTracker.Notification.Infrastructure.Messaging;
@@ -25,6 +26,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(NotificationMessagingOptions.SectionName))
             .Validate(IsValid, "NotificationMessaging configuration is invalid.")
             .ValidateOnStart();
+        services.AddOptions<NotificationNetworkCatalogOptions>()
+            .Bind(configuration.GetSection(NotificationNetworkCatalogOptions.SectionName))
+            .Validate(IsValid, "NotificationNetworks configuration is invalid.")
+            .ValidateOnStart();
         services.AddDbContext<NotificationDbContext>(options =>
             options.UseNpgsql(
                 connectionString,
@@ -32,9 +37,16 @@ public static class DependencyInjection
                     "__ef_migrations_history",
                     "notification")));
         services.AddScoped<IWatchlistProjectionStore, WatchlistProjectionStore>();
+        services.AddScoped<ITransferNotificationStore, TransferNotificationStore>();
+        services.AddScoped<IOutboxBatchStore, NotificationOutboxBatchStore>();
+        services.AddSingleton<INetworkDisplayNameResolver, ConfiguredNetworkDisplayNameResolver>();
         services.AddRabbitMqMessaging(
             configuration,
-            registration => registration.AddConsumer<WatchlistProjectionConsumer>(),
+            registration =>
+            {
+                registration.AddConsumer<WatchlistProjectionConsumer>();
+                registration.AddConsumer<TransferObservedConsumer>();
+            },
             (broker, context, _) =>
             {
                 NotificationMessagingOptions options = context.GetRequiredService<
@@ -51,6 +63,18 @@ public static class DependencyInjection
                             retry.Intervals(options.RetryIntervals));
                         endpoint.ConfigureConsumer<WatchlistProjectionConsumer>(context);
                     });
+                broker.ReceiveEndpoint(
+                    options.TransferMatcherQueue,
+                    endpoint =>
+                    {
+                        endpoint.Durable = true;
+                        endpoint.AutoDelete = false;
+                        endpoint.PrefetchCount = options.PrefetchCount;
+                        endpoint.ConcurrentMessageLimit = 1;
+                        endpoint.UseMessageRetry(retry =>
+                            retry.Intervals(options.RetryIntervals));
+                        endpoint.ConfigureConsumer<TransferObservedConsumer>(context);
+                    });
             });
 
         return services;
@@ -58,7 +82,19 @@ public static class DependencyInjection
 
     private static bool IsValid(NotificationMessagingOptions options) =>
         !string.IsNullOrWhiteSpace(options.WatchlistProjectionQueue) &&
+        !string.IsNullOrWhiteSpace(options.TransferMatcherQueue) &&
+        !string.Equals(
+            options.WatchlistProjectionQueue,
+            options.TransferMatcherQueue,
+            StringComparison.OrdinalIgnoreCase) &&
         options.PrefetchCount > 0 &&
         options.RetryIntervals.Length > 0 &&
         options.RetryIntervals.All(interval => interval > TimeSpan.Zero);
+
+    private static bool IsValid(NotificationNetworkCatalogOptions options) =>
+        options.Networks.Length > 0 &&
+        options.Networks.All(network =>
+            network.ChainId > 0 && !string.IsNullOrWhiteSpace(network.DisplayName)) &&
+        options.Networks.Select(network => network.ChainId).Distinct().Count() ==
+        options.Networks.Length;
 }
