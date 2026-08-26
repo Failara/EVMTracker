@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EVMTracker.EvmIndexer.Domain\EVMTracker.EvmIndexer.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\EVMTracker.Contracts\EVMTracker.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../../src/Services/TelegramGateway/EVMTracker.TelegramGateway.Application/EVMTracker.TelegramGateway.Application.csproj" />
+    <ProjectReference Include="../../../src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure/EVMTracker.TelegramGateway.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

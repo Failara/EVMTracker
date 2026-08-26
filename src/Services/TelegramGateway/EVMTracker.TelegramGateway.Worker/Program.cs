@@ -1,8 +1,10 @@
 using EVMTracker.Observability;
+using EVMTracker.TelegramGateway.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddServiceDefaults();
+builder.Services.AddTelegramGatewayInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 

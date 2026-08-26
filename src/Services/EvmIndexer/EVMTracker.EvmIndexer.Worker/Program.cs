@@ -1,8 +1,13 @@
+using EVMTracker.EvmIndexer.Infrastructure;
 using EVMTracker.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddServiceDefaults();
+string connectionString = builder.Configuration.GetConnectionString("EvmIndexer")
+    ?? throw new InvalidOperationException(
+        "The ConnectionStrings:EvmIndexer setting is required.");
+builder.Services.AddEvmIndexerInfrastructure(builder.Configuration, connectionString);
 
 var app = builder.Build();
 

@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../../src/Services/EvmIndexer/EVMTracker.EvmIndexer.Domain/EVMTracker.EvmIndexer.Domain.csproj" />
+    <ProjectReference Include="../../../src/Services/EvmIndexer/EVMTracker.EvmIndexer.Application/EVMTracker.EvmIndexer.Application.csproj" />
+    <ProjectReference Include="../../../src/BuildingBlocks/EVMTracker.Contracts/EVMTracker.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 3 are complete. The repository has a buildable .NET 10 microservice foundation, a tested Watchlist domain model, and durable Watchlist use cases exposed through a REST API. Telegram command handling begins in Phase 4.
+The short version: Phases 1 through 5 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, and a confirmed-block ERC-20 indexer with durable checkpoints and transactional outbox recording. Broker integration and the Notification service's local Watchlist projection begin in Phase 6.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 3 completed and verified; Phase 4 is the next implementation step.
+**Status:** Phase 5 completed and verified; Phase 6 is the next implementation step.
 
 ## Current State
 
@@ -28,13 +28,22 @@ The repository currently contains:
 - A transactional outbox that stores versioned Watchlist lifecycle events in the same database transaction as aggregate changes.
 - Watchlist REST endpoints for add, list, update, and remove operations.
 - Watchlist application and persistence integration tests, including duplicate enforcement and aggregate/outbox atomicity.
+- Telegram long polling with cancellation and bounded retry delay.
+- Telegram command parsing and routing for `/start`, `/help`, `/add`, `/list`, `/remove`, and `/status`.
+- A typed Watchlist HTTP client with timeouts, correlation IDs, error mapping, and network-specific removal behavior.
+- Startup validation for the Telegram token, Watchlist API URL, polling settings, and supported network catalog.
+- Telegram command and HTTP adapter tests that run without Telegram, PostgreSQL, or a live Watchlist service.
+- Configurable multi-network EVM polling with confirmation-depth safe heads and bounded block ranges.
+- Nethereum-backed `eth_blockNumber`, `eth_getLogs`, and ERC-20 metadata calls.
+- ERC-20 `Transfer` decoding from indexed `from`/`to` topics with normalized transfer identity.
+- Durable per-network checkpoints, processed-transfer deduplication, and transactional transfer outbox recording.
+- Adaptive block-range reduction for provider timeouts and range-limit responses.
+- Deterministic indexer unit and SQLite persistence integration tests.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Telegram bot command handling.
-- EVM block and ERC-20 log indexing.
 - Address-to-transfer matching.
 - Reliable notification delivery.
 - Message broker integration.
@@ -307,52 +316,56 @@ Recommended tests:
 
 ## Phase 4: Implement Telegram Commands
 
+Status: implemented and verified.
+
 Goal: let real users manage their watchlists through Telegram.
 
 Tasks:
 
-- Add Telegram update receiving using polling for local development.
-- Add command routing for:
+- [x] Add Telegram update receiving using polling for local development.
+- [x] Add command routing for:
   - `/start`
   - `/help`
   - `/add <network> <address> [label]`
   - `/list`
   - `/remove <network> <address>`
   - `/status`
-- Convert Telegram input into Watchlist API requests.
-- Return friendly responses for malformed addresses, duplicates, unsupported networks, and unavailable services.
-- Add request timeouts, cancellation, and correlation IDs.
-- Keep webhook support as a deployment enhancement after the polling MVP works.
+- [x] Convert Telegram input into Watchlist API requests.
+- [x] Return friendly responses for malformed addresses, duplicates, unsupported networks, and unavailable services.
+- [x] Add request timeouts, cancellation, and correlation IDs.
+- [x] Keep webhook support as a deployment enhancement after the polling MVP works.
 
 Recommended tests:
 
-- `/add` parses valid lowercase, uppercase, and checksummed input.
-- Missing parameters produce usage guidance.
-- `/list` contains only the current user's entries.
-- Watchlist application errors map to user-friendly messages.
+- [x] `/add` parses valid lowercase, uppercase, and checksummed input.
+- [x] Missing parameters produce usage guidance.
+- [x] `/list` contains only the current user's entries.
+- [x] Watchlist application errors map to user-friendly messages.
 
 ## Phase 5: Implement the EVM Indexer
+
+Status: implemented and verified.
 
 Goal: retrieve ERC-20 transfer activity without losing confirmed logs during restarts.
 
 Tasks:
 
-- Add per-network RPC configuration and provider abstraction.
-- Read the latest chain head with `eth_blockNumber`.
-- Calculate a safe head using configurable confirmation depth.
-- Retrieve bounded block ranges through `eth_getLogs`.
-- Filter by the ERC-20 event signature:
+- [x] Add per-network RPC configuration and provider abstraction.
+- [x] Read the latest chain head with `eth_blockNumber`.
+- [x] Calculate a safe head using configurable confirmation depth.
+- [x] Retrieve bounded block ranges through `eth_getLogs`.
+- [x] Filter by the ERC-20 event signature:
 
   ```solidity
   event Transfer(address indexed from, address indexed to, uint256 value);
   ```
 
-- Decode `from` from `topic1`, `to` from `topic2`, and `value` from log data.
-- Normalize chain ID, contract address, participant addresses, transaction hash, block number, block hash, log index, and raw value.
-- Retrieve and cache token `symbol`, `name`, and `decimals` with safe fallbacks.
-- Store durable checkpoints and processed log identities.
-- Adapt block-range size when the RPC provider times out or rejects large ranges.
-- Publish `Erc20TransferObserved` events through a transactional outbox.
+- [x] Decode `from` from `topic1`, `to` from `topic2`, and `value` from log data.
+- [x] Normalize chain ID, contract address, participant addresses, transaction hash, block number, block hash, log index, and raw value.
+- [x] Retrieve and cache token `symbol`, `name`, and `decimals` with safe fallbacks.
+- [x] Store durable checkpoints and processed log identities.
+- [x] Adapt block-range size when the RPC provider times out or rejects large ranges.
+- [x] Record versioned `Erc20TransferObserved` events through a transactional outbox. RabbitMQ dispatch is implemented in Phase 6.
 
 Important design note:
 
@@ -360,11 +373,11 @@ Wallet addresses are stored in the indexed log topics. The log's `address` field
 
 Recommended tests:
 
-- A real ERC-20 Transfer log is decoded correctly.
-- Restart resumes from the last committed checkpoint.
-- Reprocessing the same range does not create a second logical event.
-- Missing or malformed token metadata uses a safe fallback.
-- A provider range-limit response reduces the next query size.
+- [x] A real ERC-20 Transfer log is decoded correctly.
+- [x] Restart resumes from the last committed checkpoint.
+- [x] Reprocessing the same range does not create a second logical event.
+- [x] Missing or malformed token metadata uses a safe fallback.
+- [x] A provider range-limit response reduces the next query size.
 
 ## Phase 6: Add Event Contracts and Watchlist Projection
 
@@ -570,15 +583,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 4, Telegram command handling:
+The best next implementation step is Phase 6, event transport and Watchlist projection:
 
-1. Add Telegram Bot API configuration and startup validation.
-2. Implement long polling for local development with cancellation and error handling.
-3. Parse `/start`, `/help`, `/add`, `/list`, `/remove`, and `/status` commands.
-4. Call the Watchlist API through a typed HTTP client and map errors to friendly Telegram replies.
-5. Add parser, routing, and adapter tests without contacting Telegram or PostgreSQL.
+1. Add a common versioned event envelope with correlation and causation metadata.
+2. Configure RabbitMQ exchanges, queues, retries, and dead-letter queues.
+3. Dispatch the Watchlist and transfer outboxes with publisher confirmation.
+4. Build the Notification service's idempotent local Watchlist projection.
+5. Add contract compatibility, duplicate-consumption, replay, and poison-message tests.
 
-This will connect real Telegram users to the durable Watchlist behavior completed in Phase 3.
+This will connect the durable Watchlist and transfer outboxes to independently deployable consumers without cross-service database reads.
 
 ## MVP Completion Checklist
 
@@ -600,15 +613,16 @@ This will connect real Telegram users to the durable Watchlist behavior complete
 - [x] Watchlist commands and queries.
 - [x] Watchlist REST API.
 - [x] Transactional watchlist outbox.
-- [ ] Telegram `/add`, `/list`, `/remove`, and `/status` commands.
+- [x] Telegram `/add`, `/list`, `/remove`, and `/status` commands.
 
 ### EVM Monitoring
 
-- [ ] Multi-network RPC configuration.
-- [ ] Confirmed block-range polling.
-- [ ] ERC-20 Transfer log retrieval and decoding.
-- [ ] Durable per-network checkpoints.
-- [ ] Token metadata resolution.
+- [x] Multi-network RPC configuration.
+- [x] Confirmed block-range polling.
+- [x] ERC-20 Transfer log retrieval and decoding.
+- [x] Durable per-network checkpoints.
+- [x] Token metadata resolution with safe fallbacks.
+- [x] Processed-transfer identity and transactional outbox recording.
 - [ ] Reorganization detection and rewind.
 - [ ] Idempotent transfer publication.
 
@@ -635,6 +649,9 @@ This will connect real Telegram users to the durable Watchlist behavior complete
 - [x] Watchlist domain unit tests.
 - [x] Watchlist application handler tests.
 - [x] Watchlist persistence integration tests.
+- [x] Telegram command and Watchlist HTTP adapter tests.
+- [x] EVM indexer domain and pipeline tests.
+- [x] EVM indexer persistence integration tests.
 - [ ] Unit tests for remaining MVP business behavior.
 - [ ] Integration and contract tests for the remaining services.
 - [ ] End-to-end test with Anvil.
