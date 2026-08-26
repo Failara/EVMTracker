@@ -1,0 +1,22 @@
+**/bin/
+**/obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.nupkg
+TestResults/
+coverage/
+.env
+.env.*
+!.env.example
+.dotnet-cli/
+.packages/
+
+# Local database and broker data
+.data/
+
+# Operating-system files
+.DS_Store
+Thumbs.db

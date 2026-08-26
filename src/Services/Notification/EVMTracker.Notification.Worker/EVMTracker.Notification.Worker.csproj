@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\EVMTracker.Notification.Application\EVMTracker.Notification.Application.csproj" />
+    <ProjectReference Include="..\EVMTracker.Notification.Infrastructure\EVMTracker.Notification.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\EVMTracker.Observability\EVMTracker.Observability.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

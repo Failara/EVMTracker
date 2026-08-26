@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: the repository is currently at the planning stage. The target solution is an event-driven microservice system that stores Telegram users' watchlists, scans EVM networks for ERC-20 `Transfer` logs, matches transfers against monitored addresses, and delivers reliable Telegram notifications.
+The short version: Phase 1 is complete. The repository has a buildable and tested .NET 10 microservice foundation. Business behavior begins in Phase 2 with the Watchlist domain model.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** architecture and implementation roadmap prepared; application implementation has not started.
+**Status:** Phase 1 completed and verified; Phase 2 is the next implementation step.
 
 ## Current State
 
@@ -15,13 +15,17 @@ The short version: the repository is currently at the planning stage. The target
 The repository currently contains:
 
 - `Roadmap.md` with the MVP scope, proposed architecture, project structure, implementation phases, testing strategy, and thesis evaluation plan.
-- A Git repository ready for the initial solution scaffold.
+- A .NET 10 solution containing four independently deployable service hosts and Clean Architecture layer projects.
+- Central build and package configuration with nullable reference types, .NET analyzers, formatting rules, and warnings treated as errors.
+- Shared liveness and readiness endpoints used by every service host.
+- Four service unit-test projects and an architecture-test project that enforces dependency boundaries.
+- A CI workflow for restore, formatting verification, Release build, and tests.
+- Accepted ADRs for service boundaries, PostgreSQL data ownership, RabbitMQ delivery, and EVM log acquisition.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- .NET solution and service projects.
 - Domain models and application use cases.
 - Telegram bot command handling.
 - Watchlist persistence.
@@ -30,9 +34,9 @@ The project still needs:
 - Reliable notification delivery.
 - Message broker integration.
 - Idempotency and chain-reorganization handling.
-- Observability and operational dashboards.
+- Full telemetry, operational dashboards, and alerts beyond the baseline health endpoints.
 - Docker and deployment configuration.
-- Unit, integration, contract, resilience, and performance tests.
+- Business unit, integration, contract, resilience, and performance tests.
 - Reproducible experiments and thesis results.
 
 ## Target MVP Behavior
@@ -225,20 +229,20 @@ Goal: create a buildable service skeleton before adding business behavior.
 
 Tasks:
 
-- Create `EVMTracker.sln`.
-- Scaffold the four services and building-block projects.
-- Add central package and build configuration.
-- Add formatting, analyzers, nullable reference types, and warnings-as-errors rules.
-- Add initial unit-test projects.
-- Add health and readiness endpoints to each host.
-- Add CI for restore, build, test, and formatting validation.
-- Write the first ADRs for service boundaries, PostgreSQL, RabbitMQ, and the EVM acquisition model.
+- [x] Create `EVMTracker.sln`.
+- [x] Scaffold the four services and building-block projects.
+- [x] Add central package and build configuration.
+- [x] Add formatting, analyzers, nullable reference types, and warnings-as-errors rules.
+- [x] Add initial unit-test projects.
+- [x] Add health and readiness endpoints to each host.
+- [x] Add CI for restore, build, test, and formatting validation.
+- [x] Write the first ADRs for service boundaries, PostgreSQL, RabbitMQ, and the EVM acquisition model.
 
 Recommended tests:
 
-- Every service builds independently.
-- Dependency tests prevent `Domain` from referencing `Infrastructure`.
-- Every service exposes a healthy startup state with valid configuration.
+- [x] Every service builds independently.
+- [x] Dependency tests prevent `Domain` from referencing `Infrastructure`.
+- [x] Every service exposes a healthy startup state with valid configuration.
 
 ## Phase 2: Build the Watchlist Domain Model
 
@@ -559,15 +563,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is the solution foundation:
+The best next implementation step is Phase 2, the Watchlist domain model:
 
-1. Create the .NET solution and the four service skeletons.
-2. Add central build/package configuration and architecture tests.
-3. Add Docker Compose with PostgreSQL and RabbitMQ.
-4. Implement the `Address`, `ChainId`, and `TrackedAddress` domain types.
-5. Write ADRs for service boundaries, message delivery guarantees, and EVM log acquisition.
+1. Implement the `Address` value object with hexadecimal validation and EIP-55 normalization.
+2. Implement the `ChainId` value object.
+3. Implement the `TrackedAddress` aggregate and its invariants.
+4. Add the result/error primitives needed for expected domain failures.
+5. Replace the Watchlist smoke test with focused domain tests.
 
-This establishes the boundaries that later persistence, Telegram, and indexing code will depend on.
+This creates the business model that persistence, commands, and Telegram input will use in later phases.
 
 ## MVP Completion Checklist
 
@@ -578,7 +582,7 @@ This establishes the boundaries that later persistence, Telegram, and indexing c
 - [x] Describe the proposed repository structure.
 - [x] Define implementation phases and thesis experiments.
 - [ ] Create C4 context, container, and component diagrams.
-- [ ] Write initial Architecture Decision Records.
+- [x] Write initial Architecture Decision Records.
 
 ### Watchlist Management
 
@@ -615,10 +619,12 @@ This establishes the boundaries that later persistence, Telegram, and indexing c
 - [ ] RabbitMQ integration.
 - [ ] PostgreSQL database ownership per service.
 - [ ] OpenTelemetry logs, metrics, and traces.
-- [ ] Health and readiness checks.
+- [x] Health and readiness checks.
 - [ ] Dockerfiles and Docker Compose.
-- [ ] CI build and test workflow.
-- [ ] Unit and architecture tests.
+- [x] CI build and test workflow.
+- [x] Architecture boundary tests.
+- [x] Unit-test project scaffolds.
+- [ ] Unit tests for MVP business behavior.
 - [ ] Integration and contract tests.
 - [ ] End-to-end test with Anvil.
 - [ ] Resilience and performance tests.
