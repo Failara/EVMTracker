@@ -4,6 +4,7 @@ using EVMTracker.EvmIndexer.Infrastructure.Configuration;
 using EVMTracker.EvmIndexer.Infrastructure.Indexing;
 using EVMTracker.EvmIndexer.Infrastructure.Persistence;
 using EVMTracker.EvmIndexer.Infrastructure.Rpc;
+using EVMTracker.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,7 @@ public static class DependencyInjection
                     "__ef_migrations_history",
                     "evm_indexer")));
         services.AddScoped<IIndexerStateStore, IndexerStateStore>();
+        services.AddScoped<IOutboxBatchStore, IndexerOutboxBatchStore>();
         services.AddSingleton<IEvmLogSource, NethereumEvmLogSource>();
         services.AddSingleton<ITokenMetadataProvider, NethereumTokenMetadataProvider>();
         services.TryAddSingleton(TimeProvider.System);

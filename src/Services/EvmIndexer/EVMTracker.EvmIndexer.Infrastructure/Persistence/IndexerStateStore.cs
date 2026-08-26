@@ -97,7 +97,9 @@ internal sealed class IndexerStateStore(IndexerDbContext dbContext) : IIndexerSt
                 {
                     Id = integrationEvent.EventId,
                     EventType = integrationEvent.EventType,
+                    EventVersion = integrationEvent.EventVersion,
                     OccurredAtUtc = integrationEvent.OccurredAtUtc,
+                    CorrelationId = integrationEvent.EventId,
                     Payload = JsonSerializer.Serialize(
                         integrationEvent,
                         SerializerOptions),

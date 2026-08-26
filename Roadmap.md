@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 5 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, and a confirmed-block ERC-20 indexer with durable checkpoints and transactional outbox recording. Broker integration and the Notification service's local Watchlist projection begin in Phase 6.
+The short version: Phases 1 through 6 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, RabbitMQ outbox dispatch, and an idempotent Notification-owned Watchlist projection. Transfer matching begins in Phase 7.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 5 completed and verified; Phase 6 is the next implementation step.
+**Status:** Phase 6 completed and verified; Phase 7 is the next implementation step.
 
 ## Current State
 
@@ -39,6 +39,13 @@ The repository currently contains:
 - Durable per-network checkpoints, processed-transfer deduplication, and transactional transfer outbox recording.
 - Adaptive block-range reduction for provider timeouts and range-limit responses.
 - Deterministic indexer unit and SQLite persistence integration tests.
+- Versioned event envelopes with event, correlation, and causation metadata.
+- Watchlist, observed-transfer, orphaned-transfer, projection-reset, and Telegram-delivery contracts.
+- MassTransit 8.5.10 with RabbitMQ category exchanges and durable consumer queues.
+- Watchlist and EVM Indexer outbox dispatch with bounded retry and retained failure state.
+- An idempotent Notification Watchlist projection with an atomic inbox and service-owned PostgreSQL schema.
+- Event-stream replay through the Watchlist API without cross-service database reads.
+- Contract compatibility and Notification projection integration tests.
 
 ### Not Yet Implemented
 
@@ -46,7 +53,6 @@ The project still needs:
 
 - Address-to-transfer matching.
 - Reliable notification delivery.
-- Message broker integration.
 - Idempotency and chain-reorganization handling.
 - Full telemetry, operational dashboards, and alerts beyond the baseline health endpoints.
 - Docker and deployment configuration.
@@ -381,29 +387,35 @@ Recommended tests:
 
 ## Phase 6: Add Event Contracts and Watchlist Projection
 
+Status: implemented and verified.
+
 Goal: connect independently owned services without sharing databases.
 
 Tasks:
 
-- Add versioned integration-event envelopes with:
+- [x] Add versioned integration-event envelopes with:
   - `EventId`
   - `EventType`
   - `EventVersion`
   - `OccurredAt`
   - `CorrelationId`
   - `CausationId`
-- Define contracts for watchlist changes, observed transfers, orphaned transfers, and Telegram delivery requests.
-- Configure RabbitMQ exchanges, queues, retry queues, and dead-letter queues.
-- Build the notification service's local watchlist projection from watchlist events.
-- Make projection consumers idempotent.
-- Add replay support so a projection can be rebuilt without reading the Watchlist database.
+- [x] Define contracts for watchlist changes, observed transfers, orphaned transfers, and Telegram delivery requests.
+- [x] Configure RabbitMQ exchanges, durable queues, bounded retry middleware, and error/dead-letter queues.
+- [x] Build the notification service's local watchlist projection from watchlist events.
+- [x] Make projection consumers idempotent.
+- [x] Add replay support so a projection can be rebuilt without reading the Watchlist database.
+
+Design note:
+
+The projection endpoint uses short in-process retry intervals while the delivery remains unacknowledged. Once retries are exhausted, MassTransit moves the poisoned message to the durable `<queue>_error` queue; skipped messages use `<queue>_skipped`. This avoids requiring the RabbitMQ delayed-message plugin for the MVP. Longer scheduled redelivery can be added during resilience hardening if experiments show that it is needed.
 
 Recommended tests:
 
-- Contract compatibility tests reject breaking changes.
-- Duplicate events do not duplicate projected addresses.
-- Replaying events produces the same final projection.
-- A poisoned event moves to the dead-letter queue without blocking later messages.
+- [x] Contract compatibility tests reject breaking changes.
+- [x] Duplicate events do not duplicate projected addresses.
+- [x] Replaying events produces the same final projection.
+- [x] A poisoned event exhausts bounded retries and moves to the broker error queue without blocking later messages.
 
 ## Phase 7: Match ERC-20 Transfers
 
@@ -583,15 +595,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 6, event transport and Watchlist projection:
+The best next implementation step is Phase 7, ERC-20 transfer matching:
 
-1. Add a common versioned event envelope with correlation and causation metadata.
-2. Configure RabbitMQ exchanges, queues, retries, and dead-letter queues.
-3. Dispatch the Watchlist and transfer outboxes with publisher confirmation.
-4. Build the Notification service's idempotent local Watchlist projection.
-5. Add contract compatibility, duplicate-consumption, replay, and poison-message tests.
+1. Consume transfer envelopes in the Notification service.
+2. Match normalized `from` and `to` participants against the local projection.
+3. Classify incoming, outgoing, and self-transfer activity.
+4. Persist stable, deduplicated notification records.
+5. Record Telegram delivery requests through a Notification transactional outbox.
 
-This will connect the durable Watchlist and transfer outboxes to independently deployable consumers without cross-service database reads.
+This will turn the independent Watchlist and indexer streams into durable logical notifications while preserving at-least-once correctness.
 
 ## MVP Completion Checklist
 
@@ -628,7 +640,7 @@ This will connect the durable Watchlist and transfer outboxes to independently d
 
 ### Notifications
 
-- [ ] Watchlist projection in the Notification service.
+- [x] Watchlist projection in the Notification service.
 - [ ] Incoming and outgoing address matching.
 - [ ] Notification persistence and deduplication.
 - [ ] Explorer-linked Telegram rendering.
@@ -638,8 +650,8 @@ This will connect the durable Watchlist and transfer outboxes to independently d
 
 ### Platform and Quality
 
-- [ ] RabbitMQ integration.
-- [ ] PostgreSQL database ownership per service.
+- [x] RabbitMQ integration.
+- [x] PostgreSQL database ownership per service.
 - [ ] OpenTelemetry logs, metrics, and traces.
 - [x] Health and readiness checks.
 - [ ] Dockerfiles and Docker Compose.
@@ -653,7 +665,9 @@ This will connect the durable Watchlist and transfer outboxes to independently d
 - [x] EVM indexer domain and pipeline tests.
 - [x] EVM indexer persistence integration tests.
 - [ ] Unit tests for remaining MVP business behavior.
-- [ ] Integration and contract tests for the remaining services.
+- [x] Event-contract compatibility tests.
+- [x] Notification Watchlist-projection integration tests.
+- [ ] Integration and contract tests for the remaining service behavior.
 - [ ] End-to-end test with Anvil.
 - [ ] Resilience and performance tests.
 - [ ] Deployment and operations documentation.

@@ -91,11 +91,56 @@ public sealed class WatchlistPersistenceTests
         Assert.Equal(WatchlistCommitResult.Success, commitResult);
         Assert.Equal(1, await database.Context.TrackedAddresses.CountAsync());
         Assert.Equal(1, await database.Context.OutboxMessages.CountAsync());
+        var outboxMessage = await database.Context.OutboxMessages.SingleAsync();
         Assert.Equal(
             WatchlistEventTypes.AddressAddedV1,
-            await database.Context.OutboxMessages
-                .Select(message => message.EventType)
-                .SingleAsync());
+            outboxMessage.EventType);
+        Assert.Equal(1, outboxMessage.EventVersion);
+        Assert.Equal(integrationEvent.EventId, outboxMessage.CorrelationId);
+    }
+
+    [Fact]
+    public async Task OutboxFailureIsDeferredAndCanBeDeadLettered()
+    {
+        using var database = new SqliteWatchlistDatabase();
+        var outbox = new OutboxWriter(database.Context);
+        var store = new WatchlistOutboxBatchStore(database.Context);
+        TrackedAddress trackedAddress = CreateTrackedAddress([1], "Treasury");
+        var integrationEvent = new AddressAddedV1(
+            Guid.CreateVersion7(),
+            DateTimeOffset.UtcNow,
+            trackedAddress.Id,
+            trackedAddress.TelegramUserId,
+            trackedAddress.TelegramChatId,
+            trackedAddress.Address.Value,
+            trackedAddress.Label,
+            [1]);
+        outbox.Add(integrationEvent);
+        await database.Context.SaveChangesAsync();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        await store.MarkFailedAsync(
+            integrationEvent.EventId,
+            "broker unavailable",
+            now.AddMinutes(1),
+            false,
+            CancellationToken.None);
+
+        Assert.Empty(await store.GetPendingAsync(10, now, CancellationToken.None));
+        Assert.Single(
+            await store.GetPendingAsync(10, now.AddMinutes(2), CancellationToken.None));
+
+        await store.MarkFailedAsync(
+            integrationEvent.EventId,
+            "invalid event",
+            now.AddMinutes(3),
+            true,
+            CancellationToken.None);
+
+        Assert.Empty(
+            await store.GetPendingAsync(10, now.AddYears(1), CancellationToken.None));
+        Assert.NotNull(
+            (await database.Context.OutboxMessages.SingleAsync()).DeadLetteredAtUtc);
     }
 
     [Fact]

@@ -9,4 +9,6 @@ public sealed record AddressRemovedV1(
     string Address) : IWatchlistIntegrationEvent
 {
     public string EventType => WatchlistEventTypes.AddressRemovedV1;
+
+    public int EventVersion => 1;
 }

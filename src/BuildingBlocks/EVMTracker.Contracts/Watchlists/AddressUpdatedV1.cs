@@ -11,4 +11,6 @@ public sealed record AddressUpdatedV1(
     IReadOnlyCollection<long> ChainIds) : IWatchlistIntegrationEvent
 {
     public string EventType => WatchlistEventTypes.AddressUpdatedV1;
+
+    public int EventVersion => 1;
 }

@@ -1,4 +1,5 @@
 using EVMTracker.Watchlist.Api.Contracts;
+using EVMTracker.Watchlist.Application.Abstractions.Messaging;
 using EVMTracker.Watchlist.Application.TrackedAddresses;
 using EVMTracker.Watchlist.Domain.Common;
 using MediatR;
@@ -17,6 +18,7 @@ public static class WatchlistEndpoints
         group.MapGet("/users/{telegramUserId:long}", ListTrackedAddressesAsync);
         group.MapPut("/{trackedAddressId:guid}", UpdateTrackedAddressAsync);
         group.MapDelete("/{trackedAddressId:guid}", RemoveTrackedAddressAsync);
+        group.MapPost("/events/replay", ReplayEventsAsync);
 
         return endpoints;
     }
@@ -87,4 +89,23 @@ public static class WatchlistEndpoints
             ? Results.NoContent()
             : WatchlistEndpointResults.Problem(result.Error);
     }
+
+    private static async Task<IResult> ReplayEventsAsync(
+        IWatchlistEventReplayService replayService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        Guid correlationId = TryGetCorrelationId(httpContext) ?? Guid.CreateVersion7();
+        int replayedEvents = await replayService.ReplayAsync(
+            correlationId,
+            cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new { CorrelationId = correlationId, ReplayedEvents = replayedEvents });
+    }
+
+    private static Guid? TryGetCorrelationId(HttpContext httpContext) =>
+        Guid.TryParse(
+            httpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault(),
+            out Guid correlationId)
+            ? correlationId
+            : null;
 }

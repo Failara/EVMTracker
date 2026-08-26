@@ -1,0 +1,20 @@
+using EVMTracker.Notification.Infrastructure.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace EVMTracker.Notification.Infrastructure.Persistence;
+
+public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext> options)
+    : DbContext(options)
+{
+    internal DbSet<WatchlistProjectionRecord> WatchlistProjection =>
+        Set<WatchlistProjectionRecord>();
+
+    internal DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+        modelBuilder.HasDefaultSchema("notification");
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(NotificationDbContext).Assembly);
+    }
+}

@@ -14,7 +14,11 @@ internal sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outb
         builder.Property(message => message.EventType)
             .HasMaxLength(200)
             .IsRequired();
+        builder.Property(message => message.EventVersion)
+            .IsRequired();
         builder.Property(message => message.OccurredAtUtc)
+            .IsRequired();
+        builder.Property(message => message.CorrelationId)
             .IsRequired();
         builder.Property(message => message.Payload)
             .HasColumnType("jsonb")
@@ -25,7 +29,13 @@ internal sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outb
         builder.Property(message => message.LastError)
             .HasMaxLength(2000);
 
-        builder.HasIndex(message => message.ProcessedAtUtc)
-            .HasDatabaseName("ix_outbox_messages_processed_at_utc");
+        builder.HasIndex(
+                message => new
+                {
+                    message.ProcessedAtUtc,
+                    message.DeadLetteredAtUtc,
+                    message.NextAttemptAtUtc,
+                })
+            .HasDatabaseName("ix_outbox_messages_pending");
     }
 }

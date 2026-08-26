@@ -17,4 +17,6 @@ public sealed record Erc20TransferObservedV1(
     long LogIndex) : ITransferIntegrationEvent
 {
     public string EventType => TransferEventTypes.Erc20TransferObservedV1;
+
+    public int EventVersion => 1;
 }

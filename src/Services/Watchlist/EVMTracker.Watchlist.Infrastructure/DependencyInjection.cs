@@ -1,3 +1,4 @@
+using EVMTracker.Messaging;
 using EVMTracker.Watchlist.Application.Abstractions.Messaging;
 using EVMTracker.Watchlist.Application.Abstractions.Persistence;
 using EVMTracker.Watchlist.Infrastructure.Persistence;
@@ -22,6 +23,8 @@ public static class DependencyInjection
                     "watchlist")));
         services.AddScoped<ITrackedAddressRepository, TrackedAddressRepository>();
         services.AddScoped<IOutboxWriter, OutboxWriter>();
+        services.AddScoped<IOutboxBatchStore, WatchlistOutboxBatchStore>();
+        services.AddScoped<IWatchlistEventReplayService, WatchlistEventReplayService>();
         services.AddScoped<IWatchlistUnitOfWork, WatchlistUnitOfWork>();
 
         return services;

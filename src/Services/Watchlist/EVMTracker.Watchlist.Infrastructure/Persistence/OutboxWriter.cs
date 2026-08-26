@@ -18,7 +18,9 @@ internal sealed class OutboxWriter(WatchlistDbContext dbContext) : IOutboxWriter
             {
                 Id = integrationEvent.EventId,
                 EventType = integrationEvent.EventType,
+                EventVersion = integrationEvent.EventVersion,
                 OccurredAtUtc = integrationEvent.OccurredAtUtc,
+                CorrelationId = integrationEvent.EventId,
                 Payload = JsonSerializer.Serialize(
                     integrationEvent,
                     integrationEvent.GetType(),

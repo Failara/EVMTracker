@@ -2,12 +2,13 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 5 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, and confirmed ERC-20 log indexer. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 6 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, and the Notification service's idempotent Watchlist projection. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
 
 ## Prerequisites
 
 - .NET SDK 10.0.400 or a compatible 10.0 patch selected by `global.json`.
 - PostgreSQL for running the Watchlist API against persistent storage.
+- RabbitMQ for asynchronous integration events.
 - A Telegram bot token created through BotFather for running the Telegram Gateway.
 - At least one EVM JSON-RPC HTTP endpoint for running the indexer.
 
@@ -36,6 +37,7 @@ The Watchlist API exposes:
 - `GET /api/watchlist/users/{telegramUserId}`
 - `PUT /api/watchlist/{trackedAddressId}`
 - `DELETE /api/watchlist/{trackedAddressId}?telegramUserId={telegramUserId}`
+- `POST /api/watchlist/events/replay`
 
 ## Telegram command gateway
 
@@ -89,6 +91,27 @@ dotnet run --project src/Services/EvmIndexer/EVMTracker.EvmIndexer.Worker
 ```
 
 For each configured network, the worker subtracts the confirmation depth from the chain head, requests bounded `Transfer(address,address,uint256)` log ranges, decodes indexed participants, resolves cached token metadata, and atomically stores processed-transfer identity, the next checkpoint, and a versioned outbox event. Provider range-limit or timeout responses reduce the next block-range size.
+
+## RabbitMQ and Notification projection
+
+Watchlist and EVM Indexer outbox workers publish category-specific versioned envelopes through RabbitMQ. Configure the broker with `RabbitMq__Host`, `RabbitMq__Port`, `RabbitMq__VirtualHost`, `RabbitMq__Username`, and `RabbitMq__Password`. Checked-in `guest` values are local RabbitMQ defaults and must be replaced outside local development.
+
+MassTransit is pinned to the open-source `8.5.10` line. The Notification service consumes Watchlist envelopes from the durable `notification-watchlist-projection` queue, retries transient failures at configured intervals, and leaves exhausted poison messages in `notification-watchlist-projection_error`. Projection updates and inbox deduplication commit in one database transaction.
+
+Apply the Notification migration with:
+
+```powershell
+dotnet tool run dotnet-ef database update --project src/Services/Notification/EVMTracker.Notification.Infrastructure --startup-project src/Services/Notification/EVMTracker.Notification.Infrastructure --context NotificationDbContext
+```
+
+Then start RabbitMQ and the Notification worker before generating Watchlist events:
+
+```powershell
+$env:ConnectionStrings__Notification = "Host=localhost;Port=5432;Database=evmtracker_notification;Username=postgres;Password=<password>"
+dotnet run --project src/Services/Notification/EVMTracker.Notification.Worker
+```
+
+To rebuild the Notification projection exclusively from retained integration events, call `POST /api/watchlist/events/replay`. The Watchlist service publishes a reset marker followed by its ordered lifecycle-event history; the Notification service never reads the Watchlist database.
 
 ## Service hosts
 

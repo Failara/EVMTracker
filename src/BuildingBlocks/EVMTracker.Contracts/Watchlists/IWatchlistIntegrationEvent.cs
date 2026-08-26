@@ -1,10 +1,5 @@
+using EVMTracker.Contracts;
+
 namespace EVMTracker.Contracts.Watchlists;
 
-public interface IWatchlistIntegrationEvent
-{
-    Guid EventId { get; }
-
-    string EventType { get; }
-
-    DateTimeOffset OccurredAtUtc { get; }
-}
+public interface IWatchlistIntegrationEvent : IIntegrationEvent;

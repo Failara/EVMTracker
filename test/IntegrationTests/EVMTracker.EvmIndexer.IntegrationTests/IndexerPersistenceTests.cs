@@ -31,10 +31,13 @@ public sealed class IndexerPersistenceTests
         Assert.Equal(1, await database.Context.ProcessedTransfers.CountAsync());
         Assert.Equal(1, await database.Context.OutboxMessages.CountAsync());
         Assert.Equal(101, (await database.Context.Checkpoints.SingleAsync()).NextBlockNumber);
+        var outboxMessage = await database.Context.OutboxMessages.SingleAsync();
         Assert.Contains(
             TransferEventTypes.Erc20TransferObservedV1,
-            (await database.Context.OutboxMessages.SingleAsync()).Payload,
+            outboxMessage.Payload,
             StringComparison.Ordinal);
+        Assert.Equal(1, outboxMessage.EventVersion);
+        Assert.Equal(outboxMessage.Id, outboxMessage.CorrelationId);
     }
 
     [Fact]
