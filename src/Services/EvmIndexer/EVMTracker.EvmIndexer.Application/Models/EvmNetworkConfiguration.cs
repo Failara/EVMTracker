@@ -7,4 +7,5 @@ public sealed record EvmNetworkConfiguration(
     int ConfirmationDepth,
     int InitialBlockRange,
     int MinimumBlockRange,
-    int MaximumBlockRange);
+    int MaximumBlockRange,
+    int ReorganizationWindow = 64);

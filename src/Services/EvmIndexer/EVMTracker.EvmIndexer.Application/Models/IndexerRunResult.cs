@@ -5,6 +5,8 @@ public enum IndexerRunStatus
     NoConfirmedBlocks,
     RangeReduced,
     Processed,
+    Reorganized,
+    ChainChangedDuringRead,
 }
 
 public sealed record IndexerRunResult(
@@ -14,4 +16,5 @@ public sealed record IndexerRunResult(
     int RetrievedLogCount,
     int PersistedTransferCount,
     int MalformedLogCount,
-    int NextRangeSize);
+    int NextRangeSize,
+    int OrphanedTransferCount = 0);

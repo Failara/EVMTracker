@@ -14,6 +14,9 @@ public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext
     internal DbSet<TransferNotificationRecord> TransferNotifications =>
         Set<TransferNotificationRecord>();
 
+    internal DbSet<OrphanedTransferRecord> OrphanedTransfers =>
+        Set<OrphanedTransferRecord>();
+
     internal DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -27,5 +27,7 @@ public sealed class EvmNetworkOptions
 
     public int MaximumBlockRange { get; set; } = 10_000;
 
+    public int ReorganizationWindow { get; set; } = 64;
+
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(5);
 }

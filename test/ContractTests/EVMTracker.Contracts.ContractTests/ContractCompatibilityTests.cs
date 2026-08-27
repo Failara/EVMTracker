@@ -49,6 +49,18 @@ public sealed class ContractCompatibilityTests
         "telegramChatId",
     ];
 
+    private static readonly string[] TransferOrphanedProperties =
+    [
+        "chainId",
+        "eventId",
+        "eventType",
+        "eventVersion",
+        "formerBlockHash",
+        "logIndex",
+        "occurredAtUtc",
+        "transactionHash",
+    ];
+
     private static readonly DateTimeOffset OccurredAt =
         new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
 
@@ -138,5 +150,26 @@ public sealed class ContractCompatibilityTests
             .Order(StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(TelegramDeliveryProperties, properties);
+    }
+
+    [Fact]
+    public void TransferOrphanedPayloadKeepsRequiredWireFields()
+    {
+        var integrationEvent = new Erc20TransferOrphanedV1(
+            Guid.NewGuid(),
+            OccurredAt,
+            1,
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            3,
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        JsonElement payload = JsonSerializer.SerializeToElement(
+            integrationEvent,
+            SerializerOptions);
+
+        string[] properties = payload.EnumerateObject()
+            .Select(property => property.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(TransferOrphanedProperties, properties);
     }
 }

@@ -14,6 +14,9 @@ internal sealed class TransferNotificationRecordConfiguration
     {
         builder.ToTable("transfer_notifications");
         builder.HasKey(record => record.Id);
+        builder.HasIndex(record => record.DeliveryEventId)
+            .IsUnique()
+            .HasDatabaseName("ux_transfer_notifications_delivery_event_id");
         builder.Property(record => record.NetworkName).HasMaxLength(100).IsRequired();
         builder.Property(record => record.MonitoredAddress).HasMaxLength(42).IsRequired();
         builder.Property(record => record.Label).HasMaxLength(100);
@@ -39,5 +42,8 @@ internal sealed class TransferNotificationRecordConfiguration
             .HasDatabaseName(UniqueLogicalNotificationConstraintName);
         builder.HasIndex(record => record.SourceEventId)
             .HasDatabaseName("ix_transfer_notifications_source_event_id");
+        builder.HasIndex(record => new { record.ChainId, record.TransactionHash, record.LogIndex });
+        builder.HasIndex(record => record.IsOrphaned)
+            .HasDatabaseName("ix_transfer_notifications_is_orphaned");
     }
 }

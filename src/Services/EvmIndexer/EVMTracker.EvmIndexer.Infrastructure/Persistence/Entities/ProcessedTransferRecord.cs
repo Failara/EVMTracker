@@ -4,6 +4,8 @@ internal sealed class ProcessedTransferRecord
 {
     public Guid Id { get; set; }
 
+    public Guid ObservedEventId { get; set; }
+
     public long ChainId { get; set; }
 
     public string TransactionHash { get; set; } = string.Empty;
@@ -29,4 +31,8 @@ internal sealed class ProcessedTransferRecord
     public int? TokenDecimals { get; set; }
 
     public DateTimeOffset ObservedAtUtc { get; set; }
+
+    public bool IsOrphaned { get; set; }
+
+    public DateTimeOffset? OrphanedAtUtc { get; set; }
 }

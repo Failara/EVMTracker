@@ -30,6 +30,8 @@ The inbox handles ordinary broker redelivery. The stable identity and unique ind
 
 The Notification outbox dispatcher is active because Telegram Gateway now declares the durable `telegram-delivery` queue. Pending delivery requests publish through the transactional outbox and are tracked in the gateway's delivery ledger.
 
+Phase 9 adds a block-specific delivery identity derived from the logical notification identity and canonical block hash. If a retained block becomes orphaned, the indexer publishes an orphan event. Notification marks the matching logical notification as orphaned, cancels an alert that has not left its outbox, or emits one idempotent Telegram correction when the original alert was already published. An orphan tombstone suppresses a stale observation that arrives after its orphan event. See [Reorganization handling](reorganization-handling.md) for the complete recovery model.
+
 ## Token amounts
 
 Token amounts use `BigInteger` and decimal-string manipulation. Floating-point values are never used. If decimals are unavailable, the raw unsigned integer is retained for display. USD valuation is intentionally outside the initial MVP.

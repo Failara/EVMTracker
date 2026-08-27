@@ -11,6 +11,8 @@ public sealed class IndexerDbContext(DbContextOptions<IndexerDbContext> options)
     internal DbSet<ProcessedTransferRecord> ProcessedTransfers =>
         Set<ProcessedTransferRecord>();
 
+    internal DbSet<CanonicalBlockRecord> CanonicalBlocks => Set<CanonicalBlockRecord>();
+
     internal DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

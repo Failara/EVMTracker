@@ -14,6 +14,9 @@ internal sealed class ProcessedTransferRecordConfiguration
     {
         builder.ToTable("processed_transfers");
         builder.HasKey(transfer => transfer.Id);
+        builder.HasIndex(transfer => transfer.ObservedEventId)
+            .IsUnique()
+            .HasDatabaseName("ux_processed_transfers_observed_event_id");
         builder.Property(transfer => transfer.TransactionHash).HasMaxLength(66).IsRequired();
         builder.Property(transfer => transfer.BlockHash).HasMaxLength(66).IsRequired();
         builder.Property(transfer => transfer.TokenContract).HasMaxLength(42).IsRequired();
@@ -32,5 +35,6 @@ internal sealed class ProcessedTransferRecordConfiguration
             .IsUnique()
             .HasDatabaseName(UniqueTransferConstraintName);
         builder.HasIndex(transfer => new { transfer.ChainId, transfer.BlockNumber });
+        builder.HasIndex(transfer => new { transfer.ChainId, transfer.IsOrphaned });
     }
 }

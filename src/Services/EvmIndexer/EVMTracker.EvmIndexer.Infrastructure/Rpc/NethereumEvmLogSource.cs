@@ -35,6 +35,21 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
         return checked((long)head.Value);
     }
 
+    public async Task<string> GetBlockHashAsync(
+        long chainId,
+        long blockNumber,
+        CancellationToken cancellationToken)
+    {
+        BlockWithTransactionHashes block = await GetClient(chainId)
+            .Eth.Blocks.GetBlockWithTransactionsHashesByNumber
+            .SendRequestAsync(new BlockParameter(new HexBigInteger(blockNumber)))
+            .WaitAsync(requestTimeout, cancellationToken).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(block.BlockHash)
+            ? throw new InvalidOperationException(
+                $"RPC returned no hash for block {blockNumber} on chain {chainId}.")
+            : block.BlockHash.ToLowerInvariant();
+    }
+
     public async Task<IReadOnlyList<RawEvmLog>> GetTransferLogsAsync(
         long chainId,
         long fromBlock,

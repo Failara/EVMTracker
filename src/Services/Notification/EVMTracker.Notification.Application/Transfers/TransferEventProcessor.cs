@@ -58,10 +58,13 @@ public sealed class TransferEventProcessor(
                 transfer.BlockHash,
                 transfer.LogIndex,
                 envelope.OccurredAt);
+            Guid deliveryEventId = NotificationDeliveryIdentity.CreateTransferDeliveryId(
+                notification.Id,
+                notification.BlockHash);
             var deliveryRequest = new TelegramDeliveryRequestedV1(
-                notification.Id,
+                deliveryEventId,
                 envelope.OccurredAt,
-                notification.Id,
+                deliveryEventId,
                 notification.TelegramChatId,
                 TransferNotificationRenderer.Render(notification, network.ExplorerBaseUrl),
                 "HTML");

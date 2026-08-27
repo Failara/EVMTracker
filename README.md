@@ -2,7 +2,7 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 8 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, an idempotent Watchlist projection, durable ERC-20 transfer matching, and reliable rate-limited Telegram alerts. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 9 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, and bounded chain-reorganization recovery. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
 
 ## Prerequisites
 
@@ -99,6 +99,8 @@ dotnet run --project src/Services/EvmIndexer/EVMTracker.EvmIndexer.Worker
 
 For each configured network, the worker subtracts the confirmation depth from the chain head, requests bounded `Transfer(address,address,uint256)` log ranges, decodes indexed participants, resolves cached token metadata, and atomically stores processed-transfer identity, the next checkpoint, and a versioned outbox event. Provider range-limit or timeout responses reduce the next block-range size.
 
+The worker also retains `ReorganizationWindow` canonical hashes. Before advancing a checkpoint it verifies the latest retained hash, rewinds to a discovered common ancestor on mismatch, and publishes deterministic orphan events. See `docs/operations/reorganization-handling.md` for the recovery model and operator procedure.
+
 ## RabbitMQ and Notification projection
 
 Watchlist and EVM Indexer outbox workers publish category-specific versioned envelopes through RabbitMQ. Configure the broker with `RabbitMq__Host`, `RabbitMq__Port`, `RabbitMq__VirtualHost`, `RabbitMq__Username`, and `RabbitMq__Password`. Checked-in `guest` values are local RabbitMQ defaults and must be replaced outside local development.
@@ -135,6 +137,8 @@ The logical notification ID is deterministic over subscription ID, chain ID, tra
 The Notification outbox dispatcher and Telegram Gateway's durable `telegram-delivery` queue are enabled. Delivery attempts and terminal status are stored in the gateway database; see `docs/operations/telegram-delivery.md` for configuration and failure handling.
 
 Network display names are configured under `NotificationNetworks:Networks`. Unknown positive chain IDs use an `EVM chain <chainId>` fallback rather than rejecting an otherwise valid transfer.
+
+Orphan events mark matching notifications inactive. Pending alerts are cancelled, while already published alert requests produce one escaped explorer-linked correction. Orphan tombstones prevent late stale observation events from recreating invalid notifications.
 
 ## Service hosts
 

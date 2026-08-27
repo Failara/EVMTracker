@@ -23,6 +23,30 @@ namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("EVMTracker.EvmIndexer.Infrastructure.Persistence.Entities.CanonicalBlockRecord", b =>
+                {
+                    b.Property<long>("ChainId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("BlockNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("BlockHash")
+                        .IsRequired()
+                        .HasMaxLength(66)
+                        .HasColumnType("character varying(66)");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ChainId", "BlockNumber");
+
+                    b.HasIndex("ChainId", "BlockHash")
+                        .HasDatabaseName("ix_canonical_blocks_chain_hash");
+
+                    b.ToTable("canonical_blocks", "evm_indexer");
+                });
+
             modelBuilder.Entity("EVMTracker.EvmIndexer.Infrastructure.Persistence.Entities.IndexerCheckpointRecord", b =>
                 {
                     b.Property<long>("ChainId")
@@ -117,10 +141,19 @@ namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations
                         .HasMaxLength(42)
                         .HasColumnType("character varying(42)");
 
+                    b.Property<bool>("IsOrphaned")
+                        .HasColumnType("boolean");
+
                     b.Property<long>("LogIndex")
                         .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ObservedEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("OrphanedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RawValue")
@@ -157,7 +190,13 @@ namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ObservedEventId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_processed_transfers_observed_event_id");
+
                     b.HasIndex("ChainId", "BlockNumber");
+
+                    b.HasIndex("ChainId", "IsOrphaned");
 
                     b.HasIndex("ChainId", "TransactionHash", "LogIndex")
                         .IsUnique()

@@ -40,7 +40,8 @@ internal sealed partial class EvmIndexerWorker(
             network.ConfirmationDepth,
             network.InitialBlockRange,
             network.MinimumBlockRange,
-            network.MaximumBlockRange);
+            network.MaximumBlockRange,
+            network.ReorganizationWindow);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -59,6 +60,7 @@ internal sealed partial class EvmIndexerWorker(
                     result.FromBlock,
                     result.ToBlock,
                     result.PersistedTransferCount,
+                    result.OrphanedTransferCount,
                     result.NextRangeSize);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -86,7 +88,7 @@ internal sealed partial class EvmIndexerWorker(
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Information,
-        Message = "Indexer {NetworkName}: {Status}, blocks {FromBlock}-{ToBlock}, persisted {PersistedCount}, next range {NextRangeSize}.")]
+        Message = "Indexer {NetworkName}: {Status}, blocks {FromBlock}-{ToBlock}, persisted {PersistedCount}, orphaned {OrphanedCount}, next range {NextRangeSize}.")]
     private static partial void LogIterationCompleted(
         ILogger logger,
         string networkName,
@@ -94,6 +96,7 @@ internal sealed partial class EvmIndexerWorker(
         long? fromBlock,
         long? toBlock,
         int persistedCount,
+        int orphanedCount,
         int nextRangeSize);
 
     [LoggerMessage(

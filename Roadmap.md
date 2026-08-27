@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 8 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, RabbitMQ outbox dispatch, durable ERC-20 transfer matching, and reliable rate-limited Telegram notification delivery.
+The short version: Phases 1 through 9 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, and bounded EVM reorganization recovery with orphan corrections.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 8 completed and verified; Phase 9 is the next implementation step.
+**Status:** Phase 9 completed and verified; Phase 10 is the next implementation step.
 
 ## Current State
 
@@ -58,12 +58,16 @@ The repository currently contains:
 - Telegram `RetryAfter` handling and bounded exponential retry with jitter for transient failures.
 - A Telegram Gateway-owned PostgreSQL delivery ledger with request, attempt, error, Telegram message ID, and terminal-status history.
 - Event-ID idempotency for successful delivery redelivery and durable RabbitMQ error queues for terminal failures.
+- Configurable per-network canonical block-hash retention and pre-checkpoint chain verification.
+- Common-ancestor discovery, atomic checkpoint rewind, and durable orphaned-transfer state.
+- Block-specific observation event IDs with stable logical transfer and notification identities.
+- Idempotent orphan tombstones that suppress late stale observations.
+- Pending-alert cancellation, published-alert correction, and canonical reappearance handling.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Chain-reorganization correction handling.
 - Full telemetry, operational dashboards, and alerts beyond the baseline health endpoints.
 - Docker and deployment configuration.
 - Business unit, integration, contract, resilience, and performance tests.
@@ -485,26 +489,28 @@ Recommended tests:
 
 ## Phase 9: Add Idempotency and Reorganization Handling
 
+Status: implemented and verified.
+
 Goal: remain correct under at-least-once delivery, service restarts, and EVM chain reorganizations.
 
 Tasks:
 
-- Identify a transfer by `chainId + transactionHash + logIndex`.
-- Identify a notification by `subscriptionId + chainId + transactionHash + logIndex`.
-- Add inbox tables or equivalent consumer deduplication where needed.
-- Store recent canonical block hashes inside a configurable reorganization window.
-- Compare stored block hashes before advancing the checkpoint.
-- On mismatch, find the common ancestor and rewind the indexer.
-- Mark orphaned transfers and publish `TransferOrphaned` events.
-- Suppress unconfirmed notifications according to confirmation depth.
-- Send a correction only if a previously notified transfer becomes orphaned.
+- [x] Identify a transfer by `chainId + transactionHash + logIndex`.
+- [x] Identify a notification by `subscriptionId + chainId + transactionHash + logIndex`.
+- [x] Add inbox tables or equivalent consumer deduplication where needed.
+- [x] Store recent canonical block hashes inside a configurable reorganization window.
+- [x] Compare stored block hashes before advancing the checkpoint.
+- [x] On mismatch, find the common ancestor and rewind the indexer.
+- [x] Mark orphaned transfers and publish `TransferOrphaned` events.
+- [x] Suppress unconfirmed notifications according to confirmation depth.
+- [x] Send a correction only if a previously notified transfer becomes orphaned.
 
 Recommended tests:
 
-- Broker redelivery does not duplicate domain effects.
-- Indexer restart does not miss confirmed transfers.
-- A simulated short reorganization rewinds to the correct ancestor.
-- Orphaned transfers are removed from active notification state.
+- [x] Broker redelivery does not duplicate domain effects.
+- [x] Indexer restart does not miss confirmed transfers.
+- [x] A simulated short reorganization rewinds to the correct ancestor.
+- [x] Orphaned transfers are removed from active notification state.
 
 ## Phase 10: Configuration, Security, and Observability
 
@@ -615,15 +621,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 9, idempotency and reorganization handling:
+The best next implementation step is Phase 10, configuration, security, and observability:
 
-1. Persist recent canonical block hashes inside the configured reorganization window.
-2. Detect a mismatched block hash and find the common ancestor.
-3. Rewind checkpoints and publish `TransferOrphaned` events for invalidated logs.
-4. Consume orphan events in Notification and suppress or correct affected alerts.
-5. Add deterministic short-reorganization and restart tests.
+1. Add structured logs and metrics for chain head, lag, decoded logs, matches, deliveries, and reorganizations.
+2. Propagate trace and correlation identifiers across HTTP and RabbitMQ boundaries.
+3. Add startup validation and secret-provider documentation for every deployable service.
+4. Redact Telegram identities, bot tokens, RPC credentials, and database secrets from telemetry.
+5. Add dashboards and alerts for stalled checkpoints, queue failures, and delivery errors.
 
-This will make the already delivered alert path correct when an EVM network replaces recently indexed blocks.
+This will make live behavior diagnosable and prepare the completed functional pipeline for deployment experiments.
 
 ## MVP Completion Checklist
 
@@ -655,8 +661,8 @@ This will make the already delivered alert path correct when an EVM network repl
 - [x] Durable per-network checkpoints.
 - [x] Token metadata resolution with safe fallbacks.
 - [x] Processed-transfer identity and transactional outbox recording.
-- [ ] Reorganization detection and rewind.
-- [ ] Idempotent transfer publication.
+- [x] Reorganization detection and rewind.
+- [x] Idempotent transfer publication.
 
 ### Notifications
 
@@ -666,7 +672,7 @@ This will make the already delivered alert path correct when an EVM network repl
 - [x] Explorer-linked Telegram rendering.
 - [x] Global and per-chat rate limiting.
 - [x] Retry and dead-letter handling.
-- [ ] Orphaned-transfer correction behavior.
+- [x] Orphaned-transfer correction behavior.
 
 ### Platform and Quality
 

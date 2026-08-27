@@ -147,6 +147,118 @@ public sealed class TransferMatchingTests
             indexNames);
     }
 
+    [Fact]
+    public async Task PublishedNotificationBecomesOrphanedAndCreatesOneCorrection()
+    {
+        await using TestDatabase database = await TestDatabase.CreateAsync();
+        await SeedSubscriptionAsync(database.Context, Guid.NewGuid(), MonitoredAddress, 42, 84);
+        TransferEventProcessor processor = CreateProcessor(database.Context);
+        TransferIntegrationEventEnvelope observed = CreateTransferEnvelope(
+            Guid.NewGuid(),
+            OtherAddress,
+            MonitoredAddress);
+        await processor.ProcessAsync(observed, CancellationToken.None);
+        var originalOutbox = await database.Context.OutboxMessages
+            .SingleAsync(message => message.EventType ==
+                "notifications.telegram-delivery-requested.v1");
+        originalOutbox.ProcessedAtUtc = OccurredAt.AddSeconds(1);
+        await database.Context.SaveChangesAsync();
+        TransferIntegrationEventEnvelope orphan = CreateOrphanEnvelope(Guid.NewGuid());
+        var orphanProcessor = new TransferOrphanProcessor(
+            new TransferOrphanStore(database.Context, new TestNetworkResolver()));
+
+        OrphanProcessingResult first = await orphanProcessor.ProcessAsync(
+            orphan,
+            CancellationToken.None);
+        OrphanProcessingResult duplicate = await orphanProcessor.ProcessAsync(
+            orphan,
+            CancellationToken.None);
+
+        Assert.Equal(new OrphanProcessingResult(1, 1, 0), first);
+        Assert.Equal(new OrphanProcessingResult(0, 0, 0), duplicate);
+        var notification = await database.Context.TransferNotifications.SingleAsync();
+        Assert.True(notification.IsOrphaned);
+        Assert.NotNull(notification.CorrectionDeliveryEventId);
+        Assert.Equal(2, await database.Context.OutboxMessages.CountAsync());
+        var correction = await database.Context.OutboxMessages
+            .SingleAsync(message => message.Id == notification.CorrectionDeliveryEventId);
+        Assert.Contains("reorganization correction", correction.Payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PendingAlertIsCancelledWithoutSendingCorrection()
+    {
+        await using TestDatabase database = await TestDatabase.CreateAsync();
+        await SeedSubscriptionAsync(database.Context, Guid.NewGuid(), MonitoredAddress, 42, 84);
+        await CreateProcessor(database.Context).ProcessAsync(
+            CreateTransferEnvelope(Guid.NewGuid(), OtherAddress, MonitoredAddress),
+            CancellationToken.None);
+        var orphanProcessor = new TransferOrphanProcessor(
+            new TransferOrphanStore(database.Context, new TestNetworkResolver()));
+
+        OrphanProcessingResult result = await orphanProcessor.ProcessAsync(
+            CreateOrphanEnvelope(Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(new OrphanProcessingResult(1, 0, 1), result);
+        var original = await database.Context.OutboxMessages.SingleAsync();
+        Assert.NotNull(original.DeadLetteredAtUtc);
+        Assert.Equal(1, await database.Context.OutboxMessages.CountAsync());
+    }
+
+    [Fact]
+    public async Task ReobservedTransferReactivatesLogicalNotification()
+    {
+        await using TestDatabase database = await TestDatabase.CreateAsync();
+        await SeedSubscriptionAsync(database.Context, Guid.NewGuid(), MonitoredAddress, 42, 84);
+        TransferEventProcessor observedProcessor = CreateProcessor(database.Context);
+        await observedProcessor.ProcessAsync(
+            CreateTransferEnvelope(Guid.NewGuid(), OtherAddress, MonitoredAddress),
+            CancellationToken.None);
+        var original = await database.Context.OutboxMessages.SingleAsync();
+        original.ProcessedAtUtc = OccurredAt.AddSeconds(1);
+        await database.Context.SaveChangesAsync();
+        await new TransferOrphanProcessor(
+                new TransferOrphanStore(database.Context, new TestNetworkResolver()))
+            .ProcessAsync(CreateOrphanEnvelope(Guid.NewGuid()), CancellationToken.None);
+        string replacementBlockHash =
+            "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+        TransferProcessingResult result = await observedProcessor.ProcessAsync(
+            CreateTransferEnvelope(
+                Guid.NewGuid(),
+                OtherAddress,
+                MonitoredAddress,
+                replacementBlockHash,
+                101),
+            CancellationToken.None);
+
+        Assert.Equal(1, result.CreatedNotifications);
+        var notification = await database.Context.TransferNotifications.SingleAsync();
+        Assert.False(notification.IsOrphaned);
+        Assert.Equal(replacementBlockHash, notification.BlockHash);
+        Assert.Equal(3, await database.Context.OutboxMessages.CountAsync());
+    }
+
+    [Fact]
+    public async Task OrphanTombstoneSuppressesLateObservedEvent()
+    {
+        await using TestDatabase database = await TestDatabase.CreateAsync();
+        await SeedSubscriptionAsync(database.Context, Guid.NewGuid(), MonitoredAddress, 42, 84);
+        await new TransferOrphanProcessor(
+                new TransferOrphanStore(database.Context, new TestNetworkResolver()))
+            .ProcessAsync(CreateOrphanEnvelope(Guid.NewGuid()), CancellationToken.None);
+
+        TransferProcessingResult result = await CreateProcessor(database.Context).ProcessAsync(
+            CreateTransferEnvelope(Guid.NewGuid(), OtherAddress, MonitoredAddress),
+            CancellationToken.None);
+
+        Assert.Equal(0, result.CreatedNotifications);
+        Assert.Equal(0, await database.Context.TransferNotifications.CountAsync());
+        Assert.Equal(0, await database.Context.OutboxMessages.CountAsync());
+        Assert.Equal(1, await database.Context.OrphanedTransfers.CountAsync());
+    }
+
     private const string TokenAddress =
         "0x9999999999999999999999999999999999999999";
 
@@ -183,7 +295,10 @@ public sealed class TransferMatchingTests
     private static TransferIntegrationEventEnvelope CreateTransferEnvelope(
         Guid eventId,
         string fromAddress,
-        string toAddress)
+        string toAddress,
+        string blockHash =
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        long blockNumber = 100)
     {
         var transfer = new Erc20TransferObservedV1(
             eventId,
@@ -197,10 +312,30 @@ public sealed class TransferMatchingTests
             "USD Coin",
             6,
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            100,
-            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            blockNumber,
+            blockHash,
             3);
         IntegrationEventEnvelope envelope = IntegrationEventEnvelopeFactory.Create(transfer);
+        return new TransferIntegrationEventEnvelope(
+            envelope.EventId,
+            envelope.EventType,
+            envelope.EventVersion,
+            envelope.OccurredAt,
+            envelope.CorrelationId,
+            envelope.CausationId,
+            envelope.Payload);
+    }
+
+    private static TransferIntegrationEventEnvelope CreateOrphanEnvelope(Guid eventId)
+    {
+        var orphan = new Erc20TransferOrphanedV1(
+            eventId,
+            OccurredAt.AddSeconds(2),
+            1,
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            3,
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        IntegrationEventEnvelope envelope = IntegrationEventEnvelopeFactory.Create(orphan);
         return new TransferIntegrationEventEnvelope(
             envelope.EventId,
             envelope.EventType,

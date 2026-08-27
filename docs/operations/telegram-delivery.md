@@ -14,6 +14,8 @@ Phase 8 completes the user-visible path from a confirmed ERC-20 log to a Telegra
 
 Command replies use the same limiter as asynchronous notifications, so all outbound bot traffic contributes to the configured throughput.
 
+Reorganization corrections use the same durable delivery queue, persistence ledger, retry policy, and rate limits as normal alerts. Notification creates a correction only when the original alert request was already published; an unpublished alert is cancelled instead.
+
 ## Message Safety and Verification
 
 Notification messages use Telegram HTML. User labels, token metadata, addresses, amounts, and network names are HTML-encoded before interpolation. Explorer URLs are built from the chain-specific `NotificationNetworks:Networks:ExplorerBaseUrl` setting.

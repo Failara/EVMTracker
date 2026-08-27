@@ -98,6 +98,45 @@ public sealed class TransferNotificationTests
         Assert.Contains("Transaction: 0xaaaaaa", message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CorrectionRendererEscapesLabelAndLinksCanonicalIdentifiers()
+    {
+        var notification = new OrphanedTransferNotification(
+            "Ethereum",
+            "https://etherscan.io",
+            "0x2222222222222222222222222222222222222222",
+            "Ops <hot> & treasury",
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            100);
+
+        string message = TransferOrphanCorrectionRenderer.Render(notification);
+
+        Assert.Contains("Chain reorganization correction", message, StringComparison.Ordinal);
+        Assert.Contains("Ops &lt;hot&gt; &amp; treasury", message, StringComparison.Ordinal);
+        Assert.Contains("https://etherscan.io/tx/", message, StringComparison.Ordinal);
+        Assert.Contains("Former block: 100", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DeliveryIdentityChangesWhenCanonicalBlockChanges()
+    {
+        Guid notificationId = Guid.NewGuid();
+
+        Guid first = NotificationDeliveryIdentity.CreateTransferDeliveryId(
+            notificationId,
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        Guid duplicate = NotificationDeliveryIdentity.CreateTransferDeliveryId(
+            notificationId,
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        Guid replacement = NotificationDeliveryIdentity.CreateTransferDeliveryId(
+            notificationId,
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+        Assert.Equal(first, duplicate);
+        Assert.NotEqual(first, replacement);
+    }
+
     private static TransferNotification CreateNotification(
         Guid subscriptionId,
         TransferDirection direction = TransferDirection.Incoming,

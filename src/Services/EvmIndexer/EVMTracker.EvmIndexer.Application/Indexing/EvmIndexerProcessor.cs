@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using EVMTracker.Contracts.Transfers;
 using EVMTracker.EvmIndexer.Application.Abstractions;
 using EVMTracker.EvmIndexer.Application.Decoding;
@@ -30,6 +28,16 @@ public sealed class EvmIndexerProcessor(
         long chainHead = await logSource.GetHeadBlockNumberAsync(
             network.ChainId,
             cancellationToken).ConfigureAwait(false);
+        IndexerRunResult? reorganization = await ReconcileCanonicalChainAsync(
+            network,
+            storedCheckpoint,
+            currentRange,
+            cancellationToken).ConfigureAwait(false);
+        if (reorganization is not null)
+        {
+            return reorganization;
+        }
+
         long safeHead = BlockRange.CalculateSafeHead(chainHead, network.ConfirmationDepth);
         if (safeHead < nextBlock)
         {
@@ -98,6 +106,23 @@ public sealed class EvmIndexerProcessor(
                     CreateIntegrationEvent(transfer, metadata, timeProvider.GetUtcNow())));
         }
 
+        IReadOnlyList<CanonicalBlock> canonicalBlocks = await ReadCanonicalBlocksAsync(
+            network,
+            blockRange,
+            indexedTransfers,
+            cancellationToken).ConfigureAwait(false);
+        if (!LogsMatchCanonicalChain(indexedTransfers, canonicalBlocks))
+        {
+            return new IndexerRunResult(
+                IndexerRunStatus.ChainChangedDuringRead,
+                blockRange.FromBlock,
+                blockRange.ToBlock,
+                logs.Count,
+                0,
+                malformedLogCount,
+                currentRange);
+        }
+
         int nextRange = GrowRange(currentRange, network.MaximumBlockRange);
         var checkpoint = new IndexerCheckpoint(
             network.ChainId,
@@ -107,6 +132,8 @@ public sealed class EvmIndexerProcessor(
         int persistedCount = await stateStore.CommitBatchAsync(
             checkpoint,
             indexedTransfers,
+            canonicalBlocks,
+            network.ReorganizationWindow,
             cancellationToken).ConfigureAwait(false);
 
         return new IndexerRunResult(
@@ -124,7 +151,7 @@ public sealed class EvmIndexerProcessor(
         TokenMetadata metadata,
         DateTimeOffset occurredAtUtc)
     {
-        Guid eventId = CreateDeterministicEventId(transfer);
+        Guid eventId = TransferEventIdentity.CreateObservedEventId(transfer);
         return new Erc20TransferObservedV1(
             eventId,
             occurredAtUtc,
@@ -147,12 +174,123 @@ public sealed class EvmIndexerProcessor(
             ? maximumRange
             : currentRange * 2;
 
-    private static Guid CreateDeterministicEventId(Erc20Transfer transfer)
+    private async Task<IndexerRunResult?> ReconcileCanonicalChainAsync(
+        EvmNetworkConfiguration network,
+        IndexerCheckpoint? checkpoint,
+        int currentRange,
+        CancellationToken cancellationToken)
     {
-        byte[] identity = Encoding.UTF8.GetBytes(
-            $"{transfer.ChainId}:{transfer.TransactionHash.Value}:{transfer.LogIndex}");
-        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
-        SHA256.HashData(identity, hash);
-        return new Guid(hash[..16]);
+        IReadOnlyList<CanonicalBlock> recent =
+            await stateStore.GetRecentCanonicalBlocksAsync(
+                network.ChainId,
+                cancellationToken).ConfigureAwait(false);
+        if (recent.Count == 0)
+        {
+            return null;
+        }
+
+        CanonicalBlock latest = recent[0];
+        string latestHash = await logSource.GetBlockHashAsync(
+            network.ChainId,
+            latest.BlockNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (HashesEqual(latest.BlockHash, latestHash))
+        {
+            return null;
+        }
+
+        CanonicalBlock? commonAncestor = null;
+        foreach (CanonicalBlock candidate in recent.Skip(1))
+        {
+            string currentHash = await logSource.GetBlockHashAsync(
+                network.ChainId,
+                candidate.BlockNumber,
+                cancellationToken).ConfigureAwait(false);
+            if (HashesEqual(candidate.BlockHash, currentHash))
+            {
+                commonAncestor = candidate;
+                break;
+            }
+        }
+
+        long rewindBlock;
+        if (commonAncestor is not null)
+        {
+            rewindBlock = commonAncestor.BlockNumber + 1;
+        }
+        else if (recent[^1].BlockNumber == network.StartBlock)
+        {
+            rewindBlock = network.StartBlock;
+        }
+        else
+        {
+            throw new ReorganizationWindowExceededException(
+                $"Chain {network.ChainId} diverged below retained block {recent[^1].BlockNumber}.");
+        }
+
+        DateTimeOffset detectedAt = timeProvider.GetUtcNow();
+        var rewoundCheckpoint = new IndexerCheckpoint(
+            network.ChainId,
+            rewindBlock,
+            currentRange,
+            detectedAt);
+        ReorganizationResult result = await stateStore.RewindAsync(
+            rewoundCheckpoint,
+            rewindBlock,
+            detectedAt,
+            cancellationToken).ConfigureAwait(false);
+        return new IndexerRunResult(
+            IndexerRunStatus.Reorganized,
+            rewindBlock,
+            checkpoint is null ? null : checkpoint.NextBlockNumber - 1,
+            0,
+            0,
+            0,
+            currentRange,
+            result.OrphanedTransferCount);
     }
+
+    private async Task<IReadOnlyList<CanonicalBlock>> ReadCanonicalBlocksAsync(
+        EvmNetworkConfiguration network,
+        BlockRange blockRange,
+        IReadOnlyCollection<IndexedTransfer> transfers,
+        CancellationToken cancellationToken)
+    {
+        long tailFrom = Math.Max(
+            blockRange.FromBlock,
+            blockRange.ToBlock - network.ReorganizationWindow + 1);
+        var blockNumbers = new HashSet<long>(
+            Enumerable.Range(0, checked((int)(blockRange.ToBlock - tailFrom + 1)))
+                .Select(offset => tailFrom + offset));
+        blockNumbers.UnionWith(transfers.Select(item => item.Transfer.BlockNumber));
+
+        Task<CanonicalBlock>[] reads = blockNumbers
+            .Order()
+            .Select(async blockNumber =>
+                new CanonicalBlock(
+                    network.ChainId,
+                    blockNumber,
+                    await logSource.GetBlockHashAsync(
+                        network.ChainId,
+                        blockNumber,
+                        cancellationToken).ConfigureAwait(false)))
+            .ToArray();
+        CanonicalBlock[] blocks = await Task.WhenAll(reads).ConfigureAwait(false);
+        return blocks;
+    }
+
+    private static bool LogsMatchCanonicalChain(
+        IEnumerable<IndexedTransfer> transfers,
+        IEnumerable<CanonicalBlock> canonicalBlocks)
+    {
+        Dictionary<long, string> hashes = canonicalBlocks.ToDictionary(
+            block => block.BlockNumber,
+            block => block.BlockHash);
+        return transfers.All(item =>
+            hashes.TryGetValue(item.Transfer.BlockNumber, out string? blockHash) &&
+            HashesEqual(item.Transfer.BlockHash.Value, blockHash));
+    }
+
+    private static bool HashesEqual(string left, string right) =>
+        string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 }

@@ -45,6 +45,40 @@ namespace EVMTracker.Notification.Infrastructure.Persistence.Migrations
                     b.ToTable("inbox_messages", "notification");
                 });
 
+            modelBuilder.Entity("EVMTracker.Notification.Infrastructure.Persistence.Entities.OrphanedTransferRecord", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ChainId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FormerBlockHash")
+                        .IsRequired()
+                        .HasMaxLength(66)
+                        .HasColumnType("character varying(66)");
+
+                    b.Property<long>("LogIndex")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("OrphanedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TransactionHash")
+                        .IsRequired()
+                        .HasMaxLength(66)
+                        .HasColumnType("character varying(66)");
+
+                    b.HasKey("EventId");
+
+                    b.HasIndex("ChainId", "TransactionHash", "LogIndex", "FormerBlockHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_orphaned_transfers_chain_transaction_log_block");
+
+                    b.ToTable("orphaned_transfers", "notification");
+                });
+
             modelBuilder.Entity("EVMTracker.Notification.Infrastructure.Persistence.Entities.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -115,8 +149,14 @@ namespace EVMTracker.Notification.Infrastructure.Persistence.Migrations
                     b.Property<long>("ChainId")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("CorrectionDeliveryEventId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DeliveryEventId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Direction")
                         .IsRequired()
@@ -132,6 +172,9 @@ namespace EVMTracker.Notification.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(42)
                         .HasColumnType("character varying(42)");
+
+                    b.Property<bool>("IsOrphaned")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Label")
                         .HasMaxLength(100)
@@ -149,6 +192,9 @@ namespace EVMTracker.Notification.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("OrphanedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RawValue")
                         .IsRequired()
@@ -196,8 +242,17 @@ namespace EVMTracker.Notification.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DeliveryEventId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_transfer_notifications_delivery_event_id");
+
+                    b.HasIndex("IsOrphaned")
+                        .HasDatabaseName("ix_transfer_notifications_is_orphaned");
+
                     b.HasIndex("SourceEventId")
                         .HasDatabaseName("ix_transfer_notifications_source_event_id");
+
+                    b.HasIndex("ChainId", "TransactionHash", "LogIndex");
 
                     b.HasIndex("SubscriptionId", "ChainId", "TransactionHash", "LogIndex")
                         .IsUnique()

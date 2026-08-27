@@ -10,6 +10,7 @@ public static class DependencyInjection
     {
         services.AddScoped<WatchlistProjectionProjector>();
         services.AddScoped<TransferEventProcessor>();
+        services.AddScoped<TransferOrphanProcessor>();
         return services;
     }
 }

@@ -38,6 +38,7 @@ public static class DependencyInjection
                     "notification")));
         services.AddScoped<IWatchlistProjectionStore, WatchlistProjectionStore>();
         services.AddScoped<ITransferNotificationStore, TransferNotificationStore>();
+        services.AddScoped<ITransferOrphanStore, TransferOrphanStore>();
         services.AddScoped<IOutboxBatchStore, NotificationOutboxBatchStore>();
         services.AddSingleton<INetworkPresentationResolver, ConfiguredNetworkPresentationResolver>();
         services.AddRabbitMqMessaging(

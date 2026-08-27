@@ -10,6 +10,8 @@ internal sealed class TransferNotificationRecord
 
     public Guid SourceEventId { get; set; }
 
+    public Guid DeliveryEventId { get; set; }
+
     public long TelegramUserId { get; set; }
 
     public long TelegramChatId { get; set; }
@@ -49,4 +51,10 @@ internal sealed class TransferNotificationRecord
     public long LogIndex { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public bool IsOrphaned { get; set; }
+
+    public DateTimeOffset? OrphanedAtUtc { get; set; }
+
+    public Guid? CorrectionDeliveryEventId { get; set; }
 }

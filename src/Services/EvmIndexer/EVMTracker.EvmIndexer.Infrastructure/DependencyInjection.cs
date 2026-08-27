@@ -61,6 +61,7 @@ public static class DependencyInjection
                 network.MinimumBlockRange > 0 &&
                 network.InitialBlockRange >= network.MinimumBlockRange &&
                 network.MaximumBlockRange >= network.InitialBlockRange &&
+                network.ReorganizationWindow >= 2 &&
                 network.PollInterval > TimeSpan.Zero);
         bool chainIdsAreUnique = options.Networks
             .Select(network => network.ChainId)
