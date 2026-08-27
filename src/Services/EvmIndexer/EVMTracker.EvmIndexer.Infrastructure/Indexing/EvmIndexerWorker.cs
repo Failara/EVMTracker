@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using EVMTracker.EvmIndexer.Application.Indexing;
 using EVMTracker.EvmIndexer.Application.Models;
 using EVMTracker.EvmIndexer.Infrastructure.Configuration;
+using EVMTracker.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -47,6 +49,10 @@ internal sealed partial class EvmIndexerWorker(
         {
             try
             {
+                using Activity? activity = EVMTrackerTelemetry.StartActivity(
+                    "evm.indexer.iteration");
+                activity?.SetTag("evm.chain.id", network.ChainId);
+                activity?.SetTag("evm.network", network.Name);
                 await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
                 EvmIndexerProcessor processor = scope.ServiceProvider
                     .GetRequiredService<EvmIndexerProcessor>();
@@ -62,6 +68,18 @@ internal sealed partial class EvmIndexerWorker(
                     result.PersistedTransferCount,
                     result.OrphanedTransferCount,
                     result.NextRangeSize);
+                activity?.SetTag("indexer.status", result.Status.ToString());
+                activity?.SetTag("indexer.from_block", result.FromBlock);
+                activity?.SetTag("indexer.to_block", result.ToBlock);
+                EVMTrackerTelemetry.SetIndexerProgress(
+                    network.ChainId,
+                    result.ChainHead,
+                    result.LastProcessedBlock);
+                EVMTrackerTelemetry.RecordIndexerIteration(
+                    network.ChainId,
+                    result.RetrievedLogCount - result.MalformedLogCount,
+                    result.MalformedLogCount,
+                    result.Status == IndexerRunStatus.Reorganized);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -69,7 +87,11 @@ internal sealed partial class EvmIndexerWorker(
             }
             catch (Exception exception)
             {
-                LogIterationFailed(logger, network.Name, exception);
+                LogIterationFailed(
+                    logger,
+                    network.Name,
+                    exception.GetType().Name,
+                    SensitiveDataRedactor.Redact(null, exception.Message));
             }
 
             await Task.Delay(network.PollInterval, cancellationToken).ConfigureAwait(false);
@@ -102,9 +124,10 @@ internal sealed partial class EvmIndexerWorker(
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Warning,
-        Message = "Indexer iteration failed for {NetworkName}; it will retry after the polling interval.")]
+        Message = "Indexer iteration failed for {NetworkName} with {ExceptionType}: {SafeError}; it will retry after the polling interval.")]
     private static partial void LogIterationFailed(
         ILogger logger,
         string networkName,
-        Exception exception);
+        string exceptionType,
+        string safeError);
 }

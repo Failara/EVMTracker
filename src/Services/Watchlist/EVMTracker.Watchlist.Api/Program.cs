@@ -6,12 +6,17 @@ using EVMTracker.Watchlist.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddServiceDefaults();
+builder.Services.AddServiceDefaults(
+    builder.Configuration,
+    "EVMTracker.Watchlist.Api");
 builder.Services.AddWatchlistApplication();
 
-string connectionString = builder.Configuration.GetConnectionString("Watchlist")
-    ?? throw new InvalidOperationException(
+string connectionString = builder.Configuration.GetConnectionString("Watchlist") ?? string.Empty;
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
         "The ConnectionStrings:Watchlist setting is required.");
+}
 builder.Services.AddWatchlistInfrastructure(connectionString);
 builder.Services.AddRabbitMqMessaging(builder.Configuration);
 builder.Services.AddOutboxDispatcher(builder.Configuration);

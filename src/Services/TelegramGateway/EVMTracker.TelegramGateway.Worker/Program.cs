@@ -3,7 +3,9 @@ using EVMTracker.TelegramGateway.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddServiceDefaults();
+builder.Services.AddServiceDefaults(
+    builder.Configuration,
+    "EVMTracker.TelegramGateway.Worker");
 builder.Services.AddTelegramGatewayInfrastructure(builder.Configuration);
 
 var app = builder.Build();

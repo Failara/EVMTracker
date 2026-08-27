@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using EVMTracker.Observability;
 using EVMTracker.TelegramGateway.Application.Commands;
 using EVMTracker.TelegramGateway.Application.Delivery;
 using EVMTracker.TelegramGateway.Infrastructure.Configuration;
@@ -71,11 +73,14 @@ public sealed partial class TelegramPollingWorker(
         }
 
         Guid correlationId = Guid.CreateVersion7();
+        using Activity? activity = EVMTrackerTelemetry.StartActivity(
+            "telegram.command",
+            ActivityKind.Consumer);
+        activity?.SetTag("correlation.id", correlationId.ToString("D"));
         using IDisposable? scope = logger.BeginScope(
             new Dictionary<string, object>
             {
                 ["CorrelationId"] = correlationId,
-                ["TelegramUpdateId"] = update.Id,
             });
 
         string response = await commandService.HandleAsync(
@@ -97,7 +102,11 @@ public sealed partial class TelegramPollingWorker(
         Exception exception,
         CancellationToken cancellationToken)
     {
-        LogPollingFailed(logger, options.ErrorRetryDelay, exception);
+        LogPollingFailed(
+            logger,
+            options.ErrorRetryDelay,
+            exception.GetType().Name,
+            SensitiveDataRedactor.Redact(null, exception.Message));
         await Task.Delay(options.ErrorRetryDelay, cancellationToken).ConfigureAwait(false);
     }
 
@@ -110,9 +119,10 @@ public sealed partial class TelegramPollingWorker(
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Warning,
-        Message = "Telegram polling failed; retrying after {RetryDelay}.")]
+        Message = "Telegram polling failed with {ExceptionType}: {SafeError}; retrying after {RetryDelay}.")]
     private static partial void LogPollingFailed(
         ILogger logger,
         TimeSpan retryDelay,
-        Exception exception);
+        string exceptionType,
+        string safeError);
 }

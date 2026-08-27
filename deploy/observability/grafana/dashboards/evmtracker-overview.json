@@ -1,0 +1,84 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Chain head",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [ { "expr": "max by (evm_chain_id) (evmtracker_indexer_chain_head)", "legendFormat": "chain {{evm_chain_id}}" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Last processed block",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "expr": "max by (evm_chain_id) (evmtracker_indexer_last_processed_block)", "legendFormat": "chain {{evm_chain_id}}" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Chain lag",
+      "id": 3,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [ { "expr": "max by (evm_chain_id) (evmtracker_indexer_chain_lag)", "legendFormat": "chain {{evm_chain_id}}" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "RPC p95 duration",
+      "id": 4,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [ { "expr": "histogram_quantile(0.95, sum by (le, rpc_method) (rate(evmtracker_indexer_rpc_duration_seconds_bucket[5m])))", "legendFormat": "{{rpc_method}}" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "RPC failures",
+      "id": 5,
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 12 },
+      "targets": [ { "expr": "sum by (rpc_method) (rate(evmtracker_indexer_rpc_failures_total[5m]))", "legendFormat": "{{rpc_method}}" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Decoded and malformed logs",
+      "id": 6,
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 12 },
+      "targets": [
+        { "expr": "sum(rate(evmtracker_indexer_logs_decoded_total[5m]))", "legendFormat": "decoded" },
+        { "expr": "sum(rate(evmtracker_indexer_logs_malformed_total[5m]))", "legendFormat": "malformed" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Watchlist matches and notifications",
+      "id": 7,
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 12 },
+      "targets": [
+        { "expr": "sum(rate(evmtracker_notification_watchlist_matches_total[5m]))", "legendFormat": "matches" },
+        { "expr": "sum(rate(evmtracker_notification_created_total[5m]))", "legendFormat": "created" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "RabbitMQ ready messages",
+      "id": 8,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 19 },
+      "targets": [ { "expr": "sum by (queue) (rabbitmq_queue_messages_ready{queue=~\"notification-.*|telegram-delivery\"})", "legendFormat": "{{queue}}" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Telegram delivery outcomes",
+      "id": 9,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 19 },
+      "targets": [ { "expr": "sum by (outcome) (rate(evmtracker_telegram_deliveries_total[5m]))", "legendFormat": "{{outcome}}" } ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": [ "evmtracker", "thesis" ],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "EVMTracker Overview",
+  "uid": "evmtracker-overview",
+  "version": 1
+}

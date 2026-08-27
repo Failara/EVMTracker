@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EVMTracker.EvmIndexer.Application\EVMTracker.EvmIndexer.Application.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\EVMTracker.Messaging\EVMTracker.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\EVMTracker.Observability\EVMTracker.Observability.csproj" />
   </ItemGroup>
 
   <ItemGroup>

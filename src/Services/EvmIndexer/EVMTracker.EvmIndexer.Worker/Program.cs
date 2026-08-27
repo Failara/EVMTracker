@@ -4,10 +4,15 @@ using EVMTracker.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddServiceDefaults();
-string connectionString = builder.Configuration.GetConnectionString("EvmIndexer")
-    ?? throw new InvalidOperationException(
+builder.Services.AddServiceDefaults(
+    builder.Configuration,
+    "EVMTracker.EvmIndexer.Worker");
+string connectionString = builder.Configuration.GetConnectionString("EvmIndexer") ?? string.Empty;
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
         "The ConnectionStrings:EvmIndexer setting is required.");
+}
 builder.Services.AddEvmIndexerInfrastructure(builder.Configuration, connectionString);
 builder.Services.AddRabbitMqMessaging(builder.Configuration);
 builder.Services.AddOutboxDispatcher(builder.Configuration);

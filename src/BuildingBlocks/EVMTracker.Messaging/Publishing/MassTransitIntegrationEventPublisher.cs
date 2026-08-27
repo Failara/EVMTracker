@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using EVMTracker.Contracts;
 using EVMTracker.Contracts.Notifications;
 using EVMTracker.Contracts.Transfers;
 using EVMTracker.Contracts.Watchlists;
+using EVMTracker.Observability;
 using MassTransit;
 
 namespace EVMTracker.Messaging.Publishing;
@@ -9,7 +11,7 @@ namespace EVMTracker.Messaging.Publishing;
 internal sealed class MassTransitIntegrationEventPublisher(IPublishEndpoint publishEndpoint)
     : IIntegrationEventPublisher
 {
-    public Task PublishAsync(
+    public async Task PublishAsync(
         IntegrationEventEnvelope envelope,
         CancellationToken cancellationToken)
     {
@@ -46,6 +48,16 @@ internal sealed class MassTransitIntegrationEventPublisher(IPublishEndpoint publ
             _ => throw new InvalidOperationException(
                 $"No integration-event category is registered for '{envelope.EventType}'."),
         };
-        return publishEndpoint.Publish(categoryEnvelope, categoryEnvelope.GetType(), cancellationToken);
+        using Activity? activity = EVMTrackerTelemetry.StartIntegrationEventActivity(
+            "publish",
+            envelope.EventType,
+            envelope.EventId,
+            envelope.CorrelationId,
+            envelope.CausationId,
+            ActivityKind.Producer);
+        await publishEndpoint.Publish(
+            categoryEnvelope,
+            categoryEnvelope.GetType(),
+            cancellationToken).ConfigureAwait(false);
     }
 }

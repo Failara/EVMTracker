@@ -1,8 +1,11 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using EVMTracker.EvmIndexer.Application.Abstractions;
 using EVMTracker.EvmIndexer.Application.Decoding;
 using EVMTracker.EvmIndexer.Application.Models;
 using EVMTracker.EvmIndexer.Infrastructure.Configuration;
+using EVMTracker.Observability;
 using Microsoft.Extensions.Options;
 using Nethereum.Hex.HexTypes;
 using Nethereum.JsonRpc.Client;
@@ -29,9 +32,12 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
         long chainId,
         CancellationToken cancellationToken)
     {
-        HexBigInteger head = await GetClient(chainId)
-            .Eth.Blocks.GetBlockNumber.SendRequestAsync()
-            .WaitAsync(requestTimeout, cancellationToken).ConfigureAwait(false);
+        HexBigInteger head = await ExecuteRpcAsync(
+            chainId,
+            "eth_blockNumber",
+            () => GetClient(chainId)
+                .Eth.Blocks.GetBlockNumber.SendRequestAsync()
+                .WaitAsync(requestTimeout, cancellationToken)).ConfigureAwait(false);
         return checked((long)head.Value);
     }
 
@@ -40,10 +46,13 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
         long blockNumber,
         CancellationToken cancellationToken)
     {
-        BlockWithTransactionHashes block = await GetClient(chainId)
-            .Eth.Blocks.GetBlockWithTransactionsHashesByNumber
-            .SendRequestAsync(new BlockParameter(new HexBigInteger(blockNumber)))
-            .WaitAsync(requestTimeout, cancellationToken).ConfigureAwait(false);
+        BlockWithTransactionHashes block = await ExecuteRpcAsync(
+            chainId,
+            "eth_getBlockByNumber",
+            () => GetClient(chainId)
+                .Eth.Blocks.GetBlockWithTransactionsHashesByNumber
+                .SendRequestAsync(new BlockParameter(new HexBigInteger(blockNumber)))
+                .WaitAsync(requestTimeout, cancellationToken)).ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(block.BlockHash)
             ? throw new InvalidOperationException(
                 $"RPC returned no hash for block {blockNumber} on chain {chainId}.")
@@ -65,9 +74,12 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
 
         try
         {
-            FilterLog[] logs = await GetClient(chainId)
-                .Eth.Filters.GetLogs.SendRequestAsync(filter)
-                .WaitAsync(requestTimeout, cancellationToken).ConfigureAwait(false);
+            FilterLog[] logs = await ExecuteRpcAsync(
+                chainId,
+                "eth_getLogs",
+                () => GetClient(chainId)
+                    .Eth.Filters.GetLogs.SendRequestAsync(filter)
+                    .WaitAsync(requestTimeout, cancellationToken)).ConfigureAwait(false);
             return logs.Select(MapLog).ToArray();
         }
         catch (TimeoutException exception)
@@ -111,4 +123,41 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
     private Web3 GetClient(long chainId) => clients.TryGetValue(chainId, out Web3? client)
         ? client
         : throw new InvalidOperationException($"No RPC client is configured for chain {chainId}.");
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Every provider failure must update the RPC failure metric before being rethrown.")]
+    private static async Task<T> ExecuteRpcAsync<T>(
+        long chainId,
+        string method,
+        Func<Task<T>> request)
+    {
+        long startedAt = Stopwatch.GetTimestamp();
+        bool failed = false;
+        using Activity? activity = EVMTrackerTelemetry.StartActivity(
+            $"evm.rpc {method}",
+            ActivityKind.Client);
+        activity?.SetTag("rpc.system", "ethereum-json-rpc");
+        activity?.SetTag("rpc.method", method);
+        activity?.SetTag("evm.chain.id", chainId);
+        try
+        {
+            return await request().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            failed = true;
+            activity?.SetStatus(ActivityStatusCode.Error, exception.GetType().Name);
+            throw;
+        }
+        finally
+        {
+            EVMTrackerTelemetry.RecordRpcRequest(
+                chainId,
+                method,
+                Stopwatch.GetElapsedTime(startedAt),
+                failed);
+        }
+    }
 }

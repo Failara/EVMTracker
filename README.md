@@ -2,7 +2,7 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 9 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, and bounded chain-reorganization recovery. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 10 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, bounded chain-reorganization recovery, and OpenTelemetry-based operational diagnostics. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
 
 ## Prerequisites
 
@@ -103,7 +103,7 @@ The worker also retains `ReorganizationWindow` canonical hashes. Before advancin
 
 ## RabbitMQ and Notification projection
 
-Watchlist and EVM Indexer outbox workers publish category-specific versioned envelopes through RabbitMQ. Configure the broker with `RabbitMq__Host`, `RabbitMq__Port`, `RabbitMq__VirtualHost`, `RabbitMq__Username`, and `RabbitMq__Password`. Checked-in `guest` values are local RabbitMQ defaults and must be replaced outside local development.
+Watchlist and EVM Indexer outbox workers publish category-specific versioned envelopes through RabbitMQ. Configure the broker with `RabbitMq__Host`, `RabbitMq__Port`, `RabbitMq__VirtualHost`, `RabbitMq__Username`, and `RabbitMq__Password`. Checked-in broker credentials are intentionally empty and startup validation rejects them.
 
 MassTransit is pinned to the open-source `8.5.10` line. The Notification service consumes Watchlist envelopes from the durable `notification-watchlist-projection` queue, retries transient failures at configured intervals, and leaves exhausted poison messages in `notification-watchlist-projection_error`. Projection updates and inbox deduplication commit in one database transaction.
 
@@ -153,7 +153,16 @@ Every host exposes:
 
 - `/health/live` for process liveness;
 - `/health/ready` for service readiness;
+- `/metrics` for Prometheus scraping;
 - `/` for basic service identity.
+
+## Configuration and observability
+
+All four hosts support .NET user secrets locally and environment-variable configuration in deployed environments. Their checked-in configuration contains no usable database, broker, RPC, or Telegram credentials. Empty required values fail during startup with a setting-specific validation error.
+
+Console logs are structured JSON and redact Telegram identifiers, tokens, connection credentials, URI user information, and common secret query parameters. Active trace/span IDs and stable correlation IDs connect HTTP, RabbitMQ, indexer, Notification, and Telegram activity without recording message text or monitored addresses.
+
+OpenTelemetry exports traces and metrics through an optional `Observability__OtlpEndpoint`; redacted JSON logs remain on standard output, and Prometheus scraping remains available when OTLP is disabled. The supplied Grafana dashboard and Prometheus alerts cover chain progress and lag, RPC behavior, decoded logs, matches, broker backlog, outbox failures, and Telegram outcomes. See [configuration-and-observability.md](docs/operations/configuration-and-observability.md) for secret setup, metric names, trace lookup, and security guidance.
 
 ## Architecture rules
 

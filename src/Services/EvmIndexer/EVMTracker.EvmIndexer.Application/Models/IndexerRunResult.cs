@@ -17,4 +17,6 @@ public sealed record IndexerRunResult(
     int PersistedTransferCount,
     int MalformedLogCount,
     int NextRangeSize,
-    int OrphanedTransferCount = 0);
+    int OrphanedTransferCount = 0,
+    long ChainHead = 0,
+    long LastProcessedBlock = -1);

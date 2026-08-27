@@ -1,5 +1,6 @@
 using EVMTracker.Messaging.Configuration;
 using EVMTracker.Messaging.Publishing;
+using EVMTracker.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,11 +14,11 @@ internal sealed class OutboxDispatcherWorker(
     TimeProvider timeProvider,
     ILogger<OutboxDispatcherWorker> logger) : BackgroundService
 {
-    private static readonly Action<ILogger, Guid, int, bool, Exception?> LogDispatchFailure =
-        LoggerMessage.Define<Guid, int, bool>(
+    private static readonly Action<ILogger, Guid, int, string, string, bool, Exception?>
+        LogDispatchFailure = LoggerMessage.Define<Guid, int, string, string, bool>(
             LogLevel.Warning,
             new EventId(1, nameof(LogDispatchFailure)),
-            "Outbox event {EventId} delivery attempt {Attempt} failed; dead-lettered: {DeadLettered}");
+            "Outbox event {EventId} delivery attempt {Attempt} failed with {ExceptionType}: {SafeError}; dead-lettered: {DeadLettered}");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -57,6 +58,7 @@ internal sealed class OutboxDispatcherWorker(
                     message.Id,
                     timeProvider.GetUtcNow(),
                     cancellationToken).ConfigureAwait(false);
+                EVMTrackerTelemetry.RecordOutboxPublished(message.EventType);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -73,8 +75,13 @@ internal sealed class OutboxDispatcherWorker(
                     logger,
                     message.Id,
                     attempts,
+                    exception.GetType().Name,
+                    SensitiveDataRedactor.Redact(null, exception.Message),
                     deadLetter,
-                    exception);
+                    null);
+                EVMTrackerTelemetry.RecordOutboxFailure(
+                    message.EventType,
+                    deadLetter);
             }
         }
 

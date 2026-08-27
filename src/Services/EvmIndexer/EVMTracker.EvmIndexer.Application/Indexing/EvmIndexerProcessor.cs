@@ -32,6 +32,7 @@ public sealed class EvmIndexerProcessor(
             network,
             storedCheckpoint,
             currentRange,
+            chainHead,
             cancellationToken).ConfigureAwait(false);
         if (reorganization is not null)
         {
@@ -48,7 +49,9 @@ public sealed class EvmIndexerProcessor(
                 0,
                 0,
                 0,
-                currentRange);
+                currentRange,
+                ChainHead: chainHead,
+                LastProcessedBlock: nextBlock - 1);
         }
 
         BlockRange blockRange = BlockRange.Create(nextBlock, safeHead, currentRange);
@@ -78,7 +81,9 @@ public sealed class EvmIndexerProcessor(
                 0,
                 0,
                 0,
-                reducedRange);
+                reducedRange,
+                ChainHead: chainHead,
+                LastProcessedBlock: nextBlock - 1);
         }
 
         var indexedTransfers = new List<IndexedTransfer>(logs.Count);
@@ -120,7 +125,9 @@ public sealed class EvmIndexerProcessor(
                 logs.Count,
                 0,
                 malformedLogCount,
-                currentRange);
+                currentRange,
+                ChainHead: chainHead,
+                LastProcessedBlock: nextBlock - 1);
         }
 
         int nextRange = GrowRange(currentRange, network.MaximumBlockRange);
@@ -143,7 +150,9 @@ public sealed class EvmIndexerProcessor(
             logs.Count,
             persistedCount,
             malformedLogCount,
-            nextRange);
+            nextRange,
+            ChainHead: chainHead,
+            LastProcessedBlock: blockRange.ToBlock);
     }
 
     private static Erc20TransferObservedV1 CreateIntegrationEvent(
@@ -178,6 +187,7 @@ public sealed class EvmIndexerProcessor(
         EvmNetworkConfiguration network,
         IndexerCheckpoint? checkpoint,
         int currentRange,
+        long chainHead,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<CanonicalBlock> recent =
@@ -247,7 +257,9 @@ public sealed class EvmIndexerProcessor(
             0,
             0,
             currentRange,
-            result.OrphanedTransferCount);
+            result.OrphanedTransferCount,
+            chainHead,
+            rewindBlock - 1);
     }
 
     private async Task<IReadOnlyList<CanonicalBlock>> ReadCanonicalBlocksAsync(

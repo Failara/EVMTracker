@@ -24,9 +24,13 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        string connectionString = configuration.GetConnectionString("TelegramGateway")
-            ?? throw new InvalidOperationException(
+        string connectionString = configuration.GetConnectionString("TelegramGateway") ??
+            string.Empty;
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
                 "The ConnectionStrings:TelegramGateway setting is required.");
+        }
 
         services.AddOptions<TelegramBotOptions>()
             .Bind(configuration.GetSection(TelegramBotOptions.SectionName))

@@ -5,11 +5,16 @@ using EVMTracker.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddServiceDefaults();
+builder.Services.AddServiceDefaults(
+    builder.Configuration,
+    "EVMTracker.Notification.Worker");
 builder.Services.AddNotificationApplication();
-string connectionString = builder.Configuration.GetConnectionString("Notification")
-    ?? throw new InvalidOperationException(
+string connectionString = builder.Configuration.GetConnectionString("Notification") ?? string.Empty;
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
         "The ConnectionStrings:Notification setting is required.");
+}
 builder.Services.AddNotificationInfrastructure(
     builder.Configuration,
     connectionString);

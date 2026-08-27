@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EVMTracker.Contracts\EVMTracker.Contracts.csproj" />
+    <ProjectReference Include="..\EVMTracker.Observability\EVMTracker.Observability.csproj" />
   </ItemGroup>
 
   <ItemGroup>

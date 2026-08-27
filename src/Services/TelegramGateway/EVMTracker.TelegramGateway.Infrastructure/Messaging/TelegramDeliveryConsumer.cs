@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using EVMTracker.Contracts.Notifications;
+using EVMTracker.Observability;
 using EVMTracker.TelegramGateway.Application.Delivery;
 using MassTransit;
 using Microsoft.Extensions.Logging;
@@ -14,13 +17,42 @@ internal sealed partial class TelegramDeliveryConsumer(
     private static readonly JsonSerializerOptions SerializerOptions =
         new(JsonSerializerDefaults.Web);
 
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Every terminal or transient delivery exception must update the failure metric before broker handling continues.")]
     public async Task Consume(ConsumeContext<NotificationIntegrationEventEnvelope> context)
     {
-        TelegramDeliveryRequestedV1 request = Deserialize(context.Message);
-        TelegramDeliveryProcessingResult result = await processor.ProcessAsync(
-            request,
-            context.CancellationToken).ConfigureAwait(false);
-        LogDeliveryCompleted(logger, request.EventId, result);
+        NotificationIntegrationEventEnvelope envelope = context.Message;
+        using Activity? activity = EVMTrackerTelemetry.StartIntegrationEventActivity(
+            "consume",
+            envelope.EventType,
+            envelope.EventId,
+            envelope.CorrelationId,
+            envelope.CausationId,
+            ActivityKind.Consumer);
+        using IDisposable? scope = logger.BeginScope(
+            new Dictionary<string, object>
+            {
+                ["CorrelationId"] = envelope.CorrelationId,
+                ["EventId"] = envelope.EventId,
+            });
+        try
+        {
+            TelegramDeliveryRequestedV1 request = Deserialize(envelope);
+            TelegramDeliveryProcessingResult result = await processor.ProcessAsync(
+                request,
+                context.CancellationToken).ConfigureAwait(false);
+            EVMTrackerTelemetry.RecordTelegramDelivery(result.ToString().ToLowerInvariant());
+            activity?.SetTag("delivery.outcome", result.ToString());
+            LogDeliveryCompleted(logger, request.EventId, result);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            EVMTrackerTelemetry.RecordTelegramDelivery("failed");
+            activity?.SetStatus(ActivityStatusCode.Error, exception.GetType().Name);
+            throw;
+        }
     }
 
     private static TelegramDeliveryRequestedV1 Deserialize(

@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 9 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, and bounded EVM reorganization recovery with orphan corrections.
+The short version: Phases 1 through 10 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, bounded EVM reorganization recovery, and production-oriented OpenTelemetry diagnostics with secret-safe configuration.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 9 completed and verified; Phase 10 is the next implementation step.
+**Status:** Phase 10 completed and verified; Phase 11 is the next implementation step.
 
 ## Current State
 
@@ -63,12 +63,15 @@ The repository currently contains:
 - Block-specific observation event IDs with stable logical transfer and notification identities.
 - Idempotent orphan tombstones that suppress late stale observations.
 - Pending-alert cancellation, published-alert correction, and canonical reappearance handling.
+- Validated observability options and user-secrets support for every deployable host.
+- Redacting structured JSON logs containing W3C trace/span and stable correlation identifiers.
+- OpenTelemetry instrumentation for ASP.NET Core, HTTP clients, MassTransit, EVM RPC calls, indexer progress, notification matching, outbox publication, and Telegram delivery.
+- Prometheus endpoints, an EVMTracker Grafana dashboard, and alert rules for lag, RPC failures, queue backlog, outbox dead letters, and Telegram failures.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Full telemetry, operational dashboards, and alerts beyond the baseline health endpoints.
 - Docker and deployment configuration.
 - Business unit, integration, contract, resilience, and performance tests.
 - Reproducible experiments and thesis results.
@@ -514,16 +517,18 @@ Recommended tests:
 
 ## Phase 10: Configuration, Security, and Observability
 
+Status: implemented and verified.
+
 Goal: make live behavior diagnosable and configuration safe.
 
 Tasks:
 
-- Add strongly typed options with startup validation.
-- Configure secrets through user secrets locally and environment variables in containers.
-- Never commit Telegram tokens, RPC credentials, or database passwords.
-- Add structured logging with trace and correlation IDs.
-- Redact Telegram user data and provider credentials from logs.
-- Add metrics for:
+- [x] Add strongly typed options with startup validation.
+- [x] Configure secrets through user secrets locally and environment variables in containers.
+- [x] Never commit Telegram tokens, RPC credentials, or database passwords.
+- [x] Add structured logging with trace and correlation IDs.
+- [x] Redact Telegram user data and provider credentials from logs.
+- [x] Add metrics for:
   - current chain head;
   - last processed block;
   - chain lag;
@@ -532,14 +537,14 @@ Tasks:
   - watchlist matches;
   - broker queue depth;
   - notifications sent and failed.
-- Add distributed tracing across HTTP requests and broker messages.
-- Create Grafana dashboards and basic alerts.
+- [x] Add distributed tracing across HTTP requests and broker messages.
+- [x] Create Grafana dashboards and basic alerts.
 
 Recommended tests:
 
-- Missing required settings fail fast with a useful error.
-- Sensitive values do not appear in logs.
-- A transfer can be traced from EVM log identity to Telegram delivery status.
+- [x] Missing required settings fail fast with a useful error.
+- [x] Sensitive values do not appear in logs.
+- [x] A transfer can be traced from EVM log identity to Telegram delivery status.
 
 ## Phase 11: Dockerize and Deploy the MVP
 
@@ -621,15 +626,15 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 10, configuration, security, and observability:
+The best next implementation step is Phase 11, Dockerization and MVP deployment:
 
-1. Add structured logs and metrics for chain head, lag, decoded logs, matches, deliveries, and reorganizations.
-2. Propagate trace and correlation identifiers across HTTP and RabbitMQ boundaries.
-3. Add startup validation and secret-provider documentation for every deployable service.
-4. Redact Telegram identities, bot tokens, RPC credentials, and database secrets from telemetry.
-5. Add dashboards and alerts for stalled checkpoints, queue failures, and delivery errors.
+1. Add one multi-stage Dockerfile per deployable service and a root `.dockerignore`.
+2. Add Docker Compose for the four services, their PostgreSQL databases, RabbitMQ, Prometheus, an OpenTelemetry Collector, and Grafana.
+3. Provision the Phase 10 dashboard and alert rules automatically.
+4. Add health-based startup dependency handling and a repeatable migration workflow.
+5. Validate a clean local startup using only documented environment configuration.
 
-This will make live behavior diagnosable and prepare the completed functional pipeline for deployment experiments.
+This will make the complete observable pipeline reproducible from a clean checkout and ready for resilience experiments.
 
 ## MVP Completion Checklist
 
@@ -678,7 +683,7 @@ This will make live behavior diagnosable and prepare the completed functional pi
 
 - [x] RabbitMQ integration.
 - [x] PostgreSQL database ownership per service.
-- [ ] OpenTelemetry logs, metrics, and traces.
+- [x] Redacted structured logs plus OpenTelemetry metrics and traces.
 - [x] Health and readiness checks.
 - [ ] Dockerfiles and Docker Compose.
 - [x] CI build and test workflow.

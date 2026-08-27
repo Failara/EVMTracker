@@ -1,0 +1,46 @@
+groups:
+  - name: evmtracker
+    rules:
+      - alert: EVMTrackerIndexerStalled
+        expr: max(evmtracker_indexer_chain_lag) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: EVMTracker indexer is more than 100 blocks behind
+          description: Chain {{ $labels.evm_chain_id }} has remained behind for at least ten minutes.
+
+      - alert: EVMTrackerRpcFailures
+        expr: sum(increase(evmtracker_indexer_rpc_failures_total[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: EVM RPC requests are repeatedly failing
+          description: More than five RPC failures occurred during the last five minutes.
+
+      - alert: EVMTrackerRabbitMqBacklog
+        expr: max(rabbitmq_queue_messages_ready{queue=~"notification-.*|telegram-delivery"}) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: EVMTracker RabbitMQ backlog is growing
+          description: Queue {{ $labels.queue }} has more than 1000 ready messages.
+
+      - alert: EVMTrackerOutboxDeadLetter
+        expr: sum(increase(evmtracker_messaging_outbox_failures_total{dead_lettered="true"}[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: An EVMTracker outbox event was dead-lettered
+          description: Inspect the owning service outbox and its redacted structured logs.
+
+      - alert: EVMTrackerTelegramDeliveryFailures
+        expr: sum(increase(evmtracker_telegram_deliveries_total{outcome="failed"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Telegram deliveries are failing
+          description: Inspect Telegram Gateway delivery attempts and the RabbitMQ error queue.
