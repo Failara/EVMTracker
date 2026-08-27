@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 10 are complete. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, bounded EVM reorganization recovery, and production-oriented OpenTelemetry diagnostics with secret-safe configuration.
+The short version: Phases 1 through 11 are implemented. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, bounded EVM reorganization recovery, production-oriented OpenTelemetry diagnostics, and a reproducible Docker Compose deployment.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 10 completed and verified; Phase 11 is the next implementation step.
+**Status:** Phase 11 implementation and offline verification are complete. Credential-backed live-stack and recovery validation remain before Phase 11 is fully verified.
 
 ## Current State
 
@@ -67,12 +67,15 @@ The repository currently contains:
 - Redacting structured JSON logs containing W3C trace/span and stable correlation identifiers.
 - OpenTelemetry instrumentation for ASP.NET Core, HTTP clients, MassTransit, EVM RPC calls, indexer progress, notification matching, outbox publication, and Telegram delivery.
 - Prometheus endpoints, an EVMTracker Grafana dashboard, and alert rules for lag, RPC failures, queue backlog, outbox dead letters, and Telegram failures.
+- Multi-stage, non-root .NET 10 images for all four deployable services and dedicated EF Core migration targets.
+- A Docker Compose stack containing service-owned PostgreSQL databases, RabbitMQ, OpenTelemetry Collector, Tempo, Prometheus, and Grafana.
+- Health-based startup ordering, persistent volumes, automatically provisioned observability, environment templates, and deployment/recovery documentation.
 
 ### Not Yet Implemented
 
 The project still needs:
 
-- Docker and deployment configuration.
+- Credential-backed clean-start and dependency-recovery validation of the Docker Compose stack.
 - Business unit, integration, contract, resilience, and performance tests.
 - Reproducible experiments and thesis results.
 
@@ -548,13 +551,15 @@ Recommended tests:
 
 ## Phase 11: Dockerize and Deploy the MVP
 
+Status: implemented and offline-verified; live validation awaits a running Docker Engine, a Telegram bot token, and an EVM RPC endpoint.
+
 Goal: run the complete system predictably from a clean checkout.
 
 Tasks:
 
-- Add one Dockerfile per deployable service.
-- Add `.dockerignore`.
-- Add `compose.yaml` for:
+- [x] Add one Dockerfile per deployable service.
+- [x] Add `.dockerignore`.
+- [x] Add `compose.yaml` for:
   - Watchlist API;
   - EVM Indexer Worker;
   - Notification Worker;
@@ -562,16 +567,16 @@ Tasks:
   - PostgreSQL databases;
   - RabbitMQ;
   - Prometheus and Grafana.
-- Add health checks and startup dependency handling.
-- Document database migration commands.
-- Document local, testnet, and demonstration configuration.
-- Add optional Kubernetes manifests only after Docker Compose is stable.
+- [x] Add health checks and startup dependency handling.
+- [x] Document database migration commands.
+- [x] Document local, testnet, and demonstration configuration.
+- [ ] Add optional Kubernetes manifests only after the Compose stack passes live recovery validation.
 
 Recommended tests:
 
-- A clean environment starts with one documented command.
-- Services recover after RabbitMQ and PostgreSQL restarts.
-- Migrations can be applied without rebuilding application images.
+- [ ] A clean environment starts with one documented command.
+- [ ] Services recover after RabbitMQ and PostgreSQL restarts.
+- [ ] Migrations can be applied without rebuilding application images.
 
 ## Phase 12: Integration, Resilience, and Performance Testing
 
@@ -626,15 +631,14 @@ Tasks:
 
 ## Suggested Next Concrete Step
 
-The best next implementation step is Phase 11, Dockerization and MVP deployment:
+The next concrete step is to finish Phase 11 live validation:
 
-1. Add one multi-stage Dockerfile per deployable service and a root `.dockerignore`.
-2. Add Docker Compose for the four services, their PostgreSQL databases, RabbitMQ, Prometheus, an OpenTelemetry Collector, and Grafana.
-3. Provision the Phase 10 dashboard and alert rules automatically.
-4. Add health-based startup dependency handling and a repeatable migration workflow.
-5. Validate a clean local startup using only documented environment configuration.
+1. Start Docker Desktop or another Linux-container Docker Engine.
+2. Copy `.env.example` to the untracked `.env` file and provide strong infrastructure passwords, a BotFather token, and an EVM RPC endpoint.
+3. Run the documented one-command startup and verify migrations, health endpoints, Telegram polling, and indexer progress.
+4. Restart RabbitMQ and all four PostgreSQL containers and confirm that the services recover without missed or duplicate logical notifications.
 
-This will make the complete observable pipeline reproducible from a clean checkout and ready for resilience experiments.
+After those checks pass, proceed to Phase 12 and automate the same integration, resilience, and performance scenarios with Testcontainers and Anvil.
 
 ## MVP Completion Checklist
 
@@ -685,7 +689,7 @@ This will make the complete observable pipeline reproducible from a clean checko
 - [x] PostgreSQL database ownership per service.
 - [x] Redacted structured logs plus OpenTelemetry metrics and traces.
 - [x] Health and readiness checks.
-- [ ] Dockerfiles and Docker Compose.
+- [x] Dockerfiles and Docker Compose.
 - [x] CI build and test workflow.
 - [x] Architecture boundary tests.
 - [x] Unit-test project scaffolds.

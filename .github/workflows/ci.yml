@@ -16,6 +16,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Docker Compose
+        env:
+          WATCHLIST_DB_PASSWORD: validation-only
+          INDEXER_DB_PASSWORD: validation-only
+          NOTIFICATION_DB_PASSWORD: validation-only
+          TELEGRAM_DB_PASSWORD: validation-only
+          RABBITMQ_PASSWORD: validation-only
+          EVM_RPC_URL: https://rpc.example.invalid
+          TELEGRAM_BOT_TOKEN: 123456:validation-only-token-value
+          GRAFANA_ADMIN_PASSWORD: validation-only
+        run: docker compose --file compose.yaml config --quiet
+
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:

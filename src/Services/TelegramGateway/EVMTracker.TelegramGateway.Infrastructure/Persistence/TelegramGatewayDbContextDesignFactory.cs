@@ -8,9 +8,13 @@ public sealed class TelegramGatewayDbContextDesignFactory
 {
     public TelegramGatewayDbContext CreateDbContext(string[] args)
     {
+        string connectionString = Environment.GetEnvironmentVariable(
+            "ConnectionStrings__TelegramGateway") ??
+            "Host=localhost;Port=5432;Database=evmtracker_telegram_gateway;" +
+            "Username=postgres;Password=";
         var options = new DbContextOptionsBuilder<TelegramGatewayDbContext>()
             .UseNpgsql(
-                "Host=localhost;Database=evmtracker_telegram_gateway;Username=postgres;Password=postgres",
+                connectionString,
                 postgres => postgres.MigrationsHistoryTable(
                     "__ef_migrations_history",
                     "telegram_gateway"))

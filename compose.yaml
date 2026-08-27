@@ -1,0 +1,320 @@
+name: evmtracker
+
+x-application-environment: &application-environment
+  ASPNETCORE_ENVIRONMENT: Production
+  RabbitMq__Host: rabbitmq
+  RabbitMq__Port: 5672
+  RabbitMq__VirtualHost: /
+  RabbitMq__Username: ${RABBITMQ_USER:-evmtracker}
+  RabbitMq__Password: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+  Observability__OtlpEndpoint: http://otel-collector:4317
+  Observability__TraceSamplingRatio: ${TRACE_SAMPLING_RATIO:-1.0}
+
+services:
+  watchlist-db:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${WATCHLIST_DB_NAME:-evmtracker_watchlist}
+      POSTGRES_USER: ${WATCHLIST_DB_USER:-evmtracker_watchlist}
+      POSTGRES_PASSWORD: ${WATCHLIST_DB_PASSWORD:?Set WATCHLIST_DB_PASSWORD in .env}
+    volumes:
+      - watchlist-db-data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  indexer-db:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${INDEXER_DB_NAME:-evmtracker_indexer}
+      POSTGRES_USER: ${INDEXER_DB_USER:-evmtracker_indexer}
+      POSTGRES_PASSWORD: ${INDEXER_DB_PASSWORD:?Set INDEXER_DB_PASSWORD in .env}
+    volumes:
+      - indexer-db-data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  notification-db:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-evmtracker_notification}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-evmtracker_notification}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}
+    volumes:
+      - notification-db-data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  telegram-db:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${TELEGRAM_DB_NAME:-evmtracker_telegram_gateway}
+      POSTGRES_USER: ${TELEGRAM_DB_USER:-evmtracker_telegram_gateway}
+      POSTGRES_PASSWORD: ${TELEGRAM_DB_PASSWORD:?Set TELEGRAM_DB_PASSWORD in .env}
+    volumes:
+      - telegram-db-data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  rabbitmq:
+    image: rabbitmq:4.2.9-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-evmtracker}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./deploy/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  tempo-init:
+    image: busybox:1.37.0
+    user: "0:0"
+    command: [ "sh", "-c", "chown -R 10001:10001 /var/tempo" ]
+    volumes:
+      - tempo-data:/var/tempo
+    restart: "no"
+
+  tempo:
+    image: grafana/tempo:2.10.7
+    user: "10001:10001"
+    restart: unless-stopped
+    command: [ "-config.file=/etc/tempo/tempo.yml" ]
+    volumes:
+      - ./deploy/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+    depends_on:
+      tempo-init:
+        condition: service_completed_successfully
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.158.0
+    restart: unless-stopped
+    command: [ "--config=/etc/otelcol-contrib/config.yml" ]
+    volumes:
+      - ./deploy/observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      tempo:
+        condition: service_started
+
+  watchlist-migrations:
+    image: evmtracker/watchlist-migrations:local
+    build:
+      context: .
+      dockerfile: src/Services/Watchlist/EVMTracker.Watchlist.Api/Dockerfile
+      target: migrations
+    restart: "no"
+    environment:
+      ConnectionStrings__Watchlist: Host=watchlist-db;Port=5432;Database=${WATCHLIST_DB_NAME:-evmtracker_watchlist};Username=${WATCHLIST_DB_USER:-evmtracker_watchlist};Password=${WATCHLIST_DB_PASSWORD:?Set WATCHLIST_DB_PASSWORD in .env}
+    depends_on:
+      watchlist-db:
+        condition: service_healthy
+
+  indexer-migrations:
+    image: evmtracker/indexer-migrations:local
+    build:
+      context: .
+      dockerfile: src/Services/EvmIndexer/EVMTracker.EvmIndexer.Worker/Dockerfile
+      target: migrations
+    restart: "no"
+    environment:
+      ConnectionStrings__EvmIndexer: Host=indexer-db;Port=5432;Database=${INDEXER_DB_NAME:-evmtracker_indexer};Username=${INDEXER_DB_USER:-evmtracker_indexer};Password=${INDEXER_DB_PASSWORD:?Set INDEXER_DB_PASSWORD in .env}
+    depends_on:
+      indexer-db:
+        condition: service_healthy
+
+  notification-migrations:
+    image: evmtracker/notification-migrations:local
+    build:
+      context: .
+      dockerfile: src/Services/Notification/EVMTracker.Notification.Worker/Dockerfile
+      target: migrations
+    restart: "no"
+    environment:
+      ConnectionStrings__Notification: Host=notification-db;Port=5432;Database=${NOTIFICATION_DB_NAME:-evmtracker_notification};Username=${NOTIFICATION_DB_USER:-evmtracker_notification};Password=${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+
+  telegram-migrations:
+    image: evmtracker/telegram-migrations:local
+    build:
+      context: .
+      dockerfile: src/Services/TelegramGateway/EVMTracker.TelegramGateway.Worker/Dockerfile
+      target: migrations
+    restart: "no"
+    environment:
+      ConnectionStrings__TelegramGateway: Host=telegram-db;Port=5432;Database=${TELEGRAM_DB_NAME:-evmtracker_telegram_gateway};Username=${TELEGRAM_DB_USER:-evmtracker_telegram_gateway};Password=${TELEGRAM_DB_PASSWORD:?Set TELEGRAM_DB_PASSWORD in .env}
+    depends_on:
+      telegram-db:
+        condition: service_healthy
+
+  watchlist-api:
+    image: evmtracker/watchlist-api:local
+    build:
+      context: .
+      dockerfile: src/Services/Watchlist/EVMTracker.Watchlist.Api/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *application-environment
+      ConnectionStrings__Watchlist: Host=watchlist-db;Port=5432;Database=${WATCHLIST_DB_NAME:-evmtracker_watchlist};Username=${WATCHLIST_DB_USER:-evmtracker_watchlist};Password=${WATCHLIST_DB_PASSWORD:?Set WATCHLIST_DB_PASSWORD in .env}
+    ports:
+      - "5150:8080"
+    depends_on:
+      watchlist-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  evm-indexer:
+    image: evmtracker/evm-indexer:local
+    build:
+      context: .
+      dockerfile: src/Services/EvmIndexer/EVMTracker.EvmIndexer.Worker/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *application-environment
+      ConnectionStrings__EvmIndexer: Host=indexer-db;Port=5432;Database=${INDEXER_DB_NAME:-evmtracker_indexer};Username=${INDEXER_DB_USER:-evmtracker_indexer};Password=${INDEXER_DB_PASSWORD:?Set INDEXER_DB_PASSWORD in .env}
+      EvmIndexer__Networks__0__Name: ${EVM_NETWORK_NAME:-sepolia}
+      EvmIndexer__Networks__0__ChainId: ${EVM_CHAIN_ID:-11155111}
+      EvmIndexer__Networks__0__RpcUrl: ${EVM_RPC_URL:?Set EVM_RPC_URL in .env}
+      EvmIndexer__Networks__0__StartBlock: ${EVM_START_BLOCK:-0}
+      EvmIndexer__Networks__0__ConfirmationDepth: ${EVM_CONFIRMATION_DEPTH:-12}
+    ports:
+      - "5074:8080"
+    depends_on:
+      indexer-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  notification-worker:
+    image: evmtracker/notification-worker:local
+    build:
+      context: .
+      dockerfile: src/Services/Notification/EVMTracker.Notification.Worker/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *application-environment
+      ConnectionStrings__Notification: Host=notification-db;Port=5432;Database=${NOTIFICATION_DB_NAME:-evmtracker_notification};Username=${NOTIFICATION_DB_USER:-evmtracker_notification};Password=${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}
+    ports:
+      - "5212:8080"
+    depends_on:
+      notification-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  telegram-gateway:
+    image: evmtracker/telegram-gateway:local
+    build:
+      context: .
+      dockerfile: src/Services/TelegramGateway/EVMTracker.TelegramGateway.Worker/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *application-environment
+      ConnectionStrings__TelegramGateway: Host=telegram-db;Port=5432;Database=${TELEGRAM_DB_NAME:-evmtracker_telegram_gateway};Username=${TELEGRAM_DB_USER:-evmtracker_telegram_gateway};Password=${TELEGRAM_DB_PASSWORD:?Set TELEGRAM_DB_PASSWORD in .env}
+      TelegramBot__BotToken: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
+      WatchlistApi__BaseUrl: http://watchlist-api:8080
+    ports:
+      - "5079:8080"
+    depends_on:
+      telegram-migrations:
+        condition: service_completed_successfully
+      watchlist-api:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      otel-collector:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+volumes:
+  watchlist-db-data:
+  indexer-db-data:
+  notification-db-data:
+  telegram-db-data:
+  rabbitmq-data:
+  prometheus-data:
+  tempo-data:
+  grafana-data:

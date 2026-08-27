@@ -8,9 +8,13 @@ public sealed class NotificationDbContextDesignFactory
 {
     public NotificationDbContext CreateDbContext(string[] args)
     {
+        string connectionString = Environment.GetEnvironmentVariable(
+            "ConnectionStrings__Notification") ??
+            "Host=localhost;Port=5432;Database=evmtracker_notification;" +
+            "Username=postgres;Password=";
         var options = new DbContextOptionsBuilder<NotificationDbContext>()
             .UseNpgsql(
-                "Host=localhost;Database=evmtracker_notification;Username=postgres;Password=postgres",
+                connectionString,
                 postgres => postgres.MigrationsHistoryTable(
                     "__ef_migrations_history",
                     "notification"))

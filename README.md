@@ -2,7 +2,7 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 10 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, bounded chain-reorganization recovery, and OpenTelemetry-based operational diagnostics. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 11 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, bounded chain-reorganization recovery, OpenTelemetry-based operational diagnostics, and a reproducible Docker Compose deployment. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
 
 ## Prerequisites
 
@@ -11,6 +11,21 @@ Phases 1 through 10 are implemented: the solution foundation, durable Watchlist 
 - RabbitMQ for asynchronous integration events.
 - A Telegram bot token created through BotFather for running the Telegram Gateway.
 - At least one EVM JSON-RPC HTTP endpoint for running the indexer.
+
+For the containerized stack, install Docker Desktop or another Linux-container Docker Engine with Docker Compose.
+
+## Docker Compose deployment
+
+Copy the environment template, fill its empty secrets locally, and start the complete stack:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build --detach
+```
+
+The untracked `.env` file must contain independent database, RabbitMQ, and Grafana passwords plus a real `TELEGRAM_BOT_TOKEN` and `EVM_RPC_URL`. Set `EVM_START_BLOCK` near the intended testnet range before the first run to avoid an unnecessarily broad historical scan.
+
+The deployment runs the four services, four service-owned PostgreSQL databases, one-shot EF Core migrations, RabbitMQ, OpenTelemetry Collector, Tempo, Prometheus, and Grafana. See [docker-deployment.md](docs/operations/docker-deployment.md) for endpoints, migration commands, testnet/demo profiles, recovery checks, and data-retention behavior.
 
 ## Build and test
 

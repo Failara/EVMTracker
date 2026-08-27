@@ -8,10 +8,13 @@ public sealed class WatchlistDbContextFactory
 {
     public WatchlistDbContext CreateDbContext(string[] args)
     {
+        string connectionString = Environment.GetEnvironmentVariable(
+            "ConnectionStrings__Watchlist") ??
+            "Host=localhost;Port=5432;Database=evmtracker_watchlist;" +
+            "Username=postgres;Password=";
         var optionsBuilder = new DbContextOptionsBuilder<WatchlistDbContext>();
         optionsBuilder.UseNpgsql(
-            "Host=localhost;Port=5432;Database=evmtracker_watchlist;" +
-            "Username=postgres;Password=",
+            connectionString,
             options => options.MigrationsHistoryTable("__ef_migrations_history", "watchlist"));
 
         return new WatchlistDbContext(optionsBuilder.Options);

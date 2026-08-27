@@ -7,9 +7,13 @@ public sealed class IndexerDbContextFactory : IDesignTimeDbContextFactory<Indexe
 {
     public IndexerDbContext CreateDbContext(string[] args)
     {
+        string connectionString = Environment.GetEnvironmentVariable(
+            "ConnectionStrings__EvmIndexer") ??
+            "Host=localhost;Port=5432;Database=evmtracker_indexer;" +
+            "Username=postgres;Password=";
         var optionsBuilder = new DbContextOptionsBuilder<IndexerDbContext>();
         optionsBuilder.UseNpgsql(
-            "Host=localhost;Port=5432;Database=evmtracker_indexer;Username=postgres;Password=",
+            connectionString,
             postgresOptions => postgresOptions.MigrationsHistoryTable(
                 "__ef_migrations_history",
                 "evm_indexer"));
