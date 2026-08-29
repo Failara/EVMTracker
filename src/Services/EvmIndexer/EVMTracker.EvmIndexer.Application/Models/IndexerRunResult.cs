@@ -3,6 +3,7 @@ namespace EVMTracker.EvmIndexer.Application.Models;
 public enum IndexerRunStatus
 {
     NoConfirmedBlocks,
+    NoTrackedAddresses,
     RangeReduced,
     Processed,
     Reorganized,

@@ -30,7 +30,7 @@ Fill every empty password plus these two externally issued values:
 
 Generate independent random passwords for the four databases, RabbitMQ, and Grafana. Do not reuse the Telegram token or RPC credential as an infrastructure password. `.env` is ignored by both Git and the Docker build context.
 
-For Sepolia, also set `EVM_START_BLOCK` near the block range used for the demonstration. Leaving it at `0` requests a broad historical ERC-20 scan and can consume substantial provider quota.
+For Sepolia, also set `EVM_START_BLOCK` near the block range used for the demonstration. The indexer requests only logs involving addresses in its local Watchlist projection, but an unnecessarily old start block still consumes provider quota while checking empty history.
 
 ## One-command startup
 
@@ -62,6 +62,8 @@ Expected endpoints:
 | Grafana | `http://localhost:3000` |
 | Tempo API | `http://localhost:3200` |
 
+Use `--build` only after source or dependency changes. An ordinary restart should use `docker compose up --detach`; this reuses existing images and avoids creating build cache.
+
 Use the `RABBITMQ_USER`/`RABBITMQ_PASSWORD` and `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` values from your local `.env` when signing in.
 
 ## Migration workflow
@@ -75,7 +77,7 @@ docker compose run --rm notification-migrations
 docker compose run --rm telegram-migrations
 ```
 
-Each design-time context reads the same `ConnectionStrings__...` environment variable used by its service. Migration images contain the pinned local `dotnet-ef` tool and compiled migration assemblies. The commands are idempotent: EF Core applies only migrations not already present in the service-owned history table.
+Each design-time context reads the same `ConnectionStrings__...` environment variable used by its service. Migration images contain compact EF Core migration bundles produced with the pinned local `dotnet-ef` tool. The commands are idempotent: EF Core applies only migrations not already present in the service-owned history table.
 
 After adding a new migration, rebuild only the matching migration and application images:
 
@@ -91,7 +93,7 @@ Replace the Watchlist service names with the corresponding Indexer, Notification
 
 ### Local development
 
-Use Sepolia and a recent start block. Keep `TRACE_SAMPLING_RATIO=1.0` while diagnosing behavior. The Compose ports intentionally expose service health, RabbitMQ management, Prometheus, Grafana, and Tempo only to the Docker host's published interfaces; do not expose this configuration directly to the internet.
+Use Sepolia and a recent start block. The normal default is `TRACE_SAMPLING_RATIO=0.05`; raise it temporarily only while diagnosing a short scenario. The Compose ports intentionally expose service health, RabbitMQ management, Prometheus, Grafana, and Tempo only to the Docker host's published interfaces; do not expose this configuration directly to the internet.
 
 ### Testnet experiments
 
@@ -128,6 +130,12 @@ docker compose ps --all
 
 Confirm that services return to healthy state, checkpoints continue advancing, queues drain, and no duplicate logical notification appears. Automated restart/failure drills belong to Phase 12; Phase 11 supplies the durable volumes, retries, health checks, and observability required to run them safely.
 
+### Catch-up after downtime
+
+The indexer never replaces an existing checkpoint with the current head. After a restart it resumes at the persisted `NextBlockNumber` and processes every missed confirmed range. Successful catch-up iterations run without the normal polling delay. Provider range-limit responses still reduce the range safely.
+
+The indexer's Watchlist projection is persisted in its own database. If that projection is empty, indexing pauses rather than advancing the checkpoint and the bootstrap worker requests a Watchlist event replay. This prevents a fresh or restored indexer database from skipping activity before filter subscriptions arrive.
+
 ## Shutdown and data retention
 
 Stop containers while retaining all data:
@@ -137,3 +145,25 @@ docker compose down
 ```
 
 `docker compose down --volumes` permanently removes the four databases, broker state, metrics, traces, and Grafana state. Use that command only when intentionally resetting the complete environment.
+
+Application retention runs hourly by default:
+
+- published Indexer and Notification outbox rows: 1 day;
+- processed tracked transfers and Notification inbox rows: 7 days;
+- Indexer Watchlist inbox and rendered notification/orphan history: 30 days.
+
+Only transfers involving active monitored addresses enter the Indexer and Notification databases. Container JSON logs rotate at 10 MB with three files per container. Tempo retains six hours of traces, the default trace sample ratio is 5%, and Prometheus is capped at seven days or 1 GB.
+
+Inspect logical Docker usage with:
+
+```powershell
+docker system df -v
+```
+
+Build cache is disposable and can be reclaimed after large rebuilds:
+
+```powershell
+docker builder prune --all --force
+```
+
+Docker Desktop stores Linux images and volumes in a virtual disk. Deleting Docker objects may free space inside that disk before Windows reports more free space on the host drive. On Windows, use Docker Desktop **Settings → Resources → Advanced → Disk image location** to move the disk to a drive with sufficient capacity; do not move `docker_data.vhdx` manually.

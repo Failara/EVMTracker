@@ -1,0 +1,232 @@
+openapi: 3.1.0
+info:
+  title: EVMTracker Watchlist API
+  version: 1.0.0
+  description: User-owned EVM address subscriptions and retained event replay.
+servers:
+  - url: http://localhost:5150
+paths:
+  /api/watchlist/:
+    post:
+      operationId: addTrackedAddress
+      summary: Add an EVM address to a Telegram user's watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTrackedAddressRequest'
+      responses:
+        '201':
+          description: Tracked address created
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackedAddress'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /api/watchlist/users/{telegramUserId}:
+    get:
+      operationId: listTrackedAddresses
+      summary: List active tracked addresses belonging to a Telegram user
+      parameters:
+        - $ref: '#/components/parameters/TelegramUserId'
+      responses:
+        '200':
+          description: User watchlist
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackedAddress'
+        '400':
+          $ref: '#/components/responses/Problem'
+  /api/watchlist/{trackedAddressId}:
+    put:
+      operationId: updateTrackedAddress
+      summary: Replace label and enabled networks for a tracked address
+      parameters:
+        - $ref: '#/components/parameters/TrackedAddressId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTrackedAddressRequest'
+      responses:
+        '200':
+          description: Updated tracked address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackedAddress'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: removeTrackedAddress
+      summary: Deactivate a tracked address owned by a Telegram user
+      parameters:
+        - $ref: '#/components/parameters/TrackedAddressId'
+        - name: telegramUserId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '204':
+          description: Tracked address removed
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /api/watchlist/events/replay:
+    post:
+      operationId: replayWatchlistEvents
+      summary: Publish a projection reset and retained watchlist history
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Replay accepted and published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayResult'
+components:
+  parameters:
+    TelegramUserId:
+      name: telegramUserId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    TrackedAddressId:
+      name: trackedAddressId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Problem:
+      description: Domain, validation, conflict, or not-found failure
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    EvmAddress:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{40}$'
+      examples:
+        - '0x0000000000000000000000000000000000000001'
+    ChainIds:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        type: integer
+        format: int64
+        minimum: 1
+    AddTrackedAddressRequest:
+      type: object
+      additionalProperties: false
+      required: [address, telegramUserId, telegramChatId, chainIds]
+      properties:
+        address:
+          $ref: '#/components/schemas/EvmAddress'
+        telegramUserId:
+          type: integer
+          format: int64
+          minimum: 1
+        telegramChatId:
+          type: integer
+          format: int64
+        chainIds:
+          $ref: '#/components/schemas/ChainIds'
+        label:
+          type: [string, 'null']
+          maxLength: 100
+    UpdateTrackedAddressRequest:
+      type: object
+      additionalProperties: false
+      required: [telegramUserId, chainIds]
+      properties:
+        telegramUserId:
+          type: integer
+          format: int64
+          minimum: 1
+        chainIds:
+          $ref: '#/components/schemas/ChainIds'
+        label:
+          type: [string, 'null']
+          maxLength: 100
+    TrackedAddress:
+      type: object
+      additionalProperties: false
+      required: [id, address, telegramUserId, telegramChatId, chainIds, isActive, createdAtUtc]
+      properties:
+        id:
+          type: string
+          format: uuid
+        address:
+          $ref: '#/components/schemas/EvmAddress'
+        telegramUserId:
+          type: integer
+          format: int64
+        telegramChatId:
+          type: integer
+          format: int64
+        label:
+          type: [string, 'null']
+        chainIds:
+          $ref: '#/components/schemas/ChainIds'
+        isActive:
+          type: boolean
+        createdAtUtc:
+          type: string
+          format: date-time
+    ReplayResult:
+      type: object
+      required: [correlationId, replayedEvents]
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        replayedEvents:
+          type: integer
+          minimum: 0
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+      additionalProperties: true

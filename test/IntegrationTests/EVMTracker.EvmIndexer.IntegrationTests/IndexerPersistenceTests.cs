@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using EVMTracker.Contracts.Transfers;
 using EVMTracker.EvmIndexer.Application.Models;
 using EVMTracker.EvmIndexer.Domain.Indexing;
@@ -38,6 +39,14 @@ public sealed class IndexerPersistenceTests
             TransferEventTypes.Erc20TransferObservedV1,
             outboxMessage.Payload,
             StringComparison.Ordinal);
+        using JsonDocument payload = JsonDocument.Parse(outboxMessage.Payload);
+        Assert.Equal(
+            "0x9999999999999999999999999999999999999999",
+            payload.RootElement.GetProperty("tokenContract").GetString());
+        Assert.Equal(
+            "0x1111111111111111111111111111111111111111",
+            payload.RootElement.GetProperty("fromAddress").GetString());
+        Assert.Equal("1", payload.RootElement.GetProperty("rawValue").GetString());
         Assert.Equal(1, outboxMessage.EventVersion);
         Assert.Equal(outboxMessage.Id, outboxMessage.CorrelationId);
     }

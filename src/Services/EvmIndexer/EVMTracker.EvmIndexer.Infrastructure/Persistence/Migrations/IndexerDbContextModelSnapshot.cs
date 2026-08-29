@@ -8,11 +8,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations
+namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations;
+
+[DbContext(typeof(IndexerDbContext))]
+partial class IndexerDbContextModelSnapshot : ModelSnapshot
 {
-    [DbContext(typeof(IndexerDbContext))]
-    partial class IndexerDbContextModelSnapshot : ModelSnapshot
-    {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
@@ -64,6 +64,49 @@ namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations
                     b.HasKey("ChainId");
 
                     b.ToTable("indexer_checkpoints", "evm_indexer");
+                });
+
+            modelBuilder.Entity("EVMTracker.EvmIndexer.Infrastructure.Persistence.Entities.IndexerWatchlistInboxRecord", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("EventId");
+
+                    b.ToTable("watchlist_inbox_messages", "evm_indexer");
+                });
+
+            modelBuilder.Entity("EVMTracker.EvmIndexer.Infrastructure.Persistence.Entities.IndexerWatchlistProjectionRecord", b =>
+                {
+                    b.Property<Guid>("TrackedAddressId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ChainId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(42)
+                        .HasColumnType("character varying(42)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TrackedAddressId", "ChainId");
+
+                    b.HasIndex("ChainId", "Address")
+                        .HasDatabaseName("ix_indexer_watchlist_projection_chain_address");
+
+                    b.ToTable("watchlist_projection", "evm_indexer");
                 });
 
             modelBuilder.Entity("EVMTracker.EvmIndexer.Infrastructure.Persistence.Entities.OutboxMessage", b =>
@@ -206,5 +249,4 @@ namespace EVMTracker.EvmIndexer.Infrastructure.Persistence.Migrations
                 });
 #pragma warning restore 612, 618
         }
-    }
 }

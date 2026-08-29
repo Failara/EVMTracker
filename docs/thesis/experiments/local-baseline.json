@@ -1,0 +1,52 @@
+{
+  "$schema": "./experiment-manifest.schema.json",
+  "id": "phase13-local-baseline",
+  "description": "Deterministic smoke baseline for acquisition, range, confirmation, watchlist, and broker-backlog models.",
+  "environment": {
+    "kind": "local-testcontainers",
+    "dependencyImages": {
+      "postgresql": "postgres:18.6-alpine3.24",
+      "rabbitmq": "rabbitmq:4.2.9-management-alpine",
+      "anvil": "ghcr.io/foundry-rs/foundry:v1.7.1"
+    },
+    "notes": "Anvil is deterministic and does not model public RPC throttling or realistic block production."
+  },
+  "protocol": {
+    "warmups": 1,
+    "measuredRepetitions": 5,
+    "randomizeCaseOrder": true,
+    "correctnessRequired": true
+  },
+  "cases": [
+    {
+      "id": "broad-versus-filtered",
+      "testFilter": "FullyQualifiedName~FilteredModelExcludesIrrelevantLogsComparedWithBroadScan",
+      "independentVariables": { "irrelevantLogs": 50, "relevantLogs": 1 },
+      "metrics": ["returnedLogs", "elapsedMilliseconds"]
+    },
+    {
+      "id": "watchlist-scaling",
+      "testFilter": "FullyQualifiedName~FilteredLogQueryScalesAcrossTrackedAddressCounts",
+      "independentVariables": { "trackedAddressCounts": [1, 100, 500] },
+      "metrics": ["returnedLogs", "elapsedMilliseconds"]
+    },
+    {
+      "id": "block-range-scaling",
+      "testFilter": "FullyQualifiedName~FilteredQueryRecordsBlockRangeScaling",
+      "independentVariables": { "blockRanges": [10, 100, 1000] },
+      "metrics": ["returnedLogs", "elapsedMilliseconds"]
+    },
+    {
+      "id": "confirmation-depth",
+      "testFilter": "FullyQualifiedName~ConfirmationDepthModelTests",
+      "independentVariables": { "confirmationDepths": [0, 3, 12], "assumedBlockSeconds": 3 },
+      "metrics": ["minimumAddedLatencySeconds"]
+    },
+    {
+      "id": "broker-backlog",
+      "testFilter": "FullyQualifiedName~RabbitMqBacklogPerformanceTests",
+      "independentVariables": { "backlogSizes": [100, 1000] },
+      "metrics": ["drainMilliseconds", "messagesPerSecond", "missed", "duplicates", "processWorkingSetDeltaBytes"]
+    }
+  ]
+}

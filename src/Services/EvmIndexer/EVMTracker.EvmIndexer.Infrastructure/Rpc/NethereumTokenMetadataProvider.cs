@@ -72,12 +72,11 @@ internal sealed class NethereumTokenMetadataProvider : ITokenMetadataProvider
                 .CallAsync<BigInteger>()
                 .WaitAsync(requestTimeout).ConfigureAwait(false);
 
-            string normalizedSymbol = string.IsNullOrWhiteSpace(symbol)
+            string? cleanSymbol = TokenMetadataTextNormalizer.Normalize(symbol, 64);
+            string normalizedSymbol = cleanSymbol is null
                 ? TokenMetadata.Unknown(tokenContract).Symbol
-                : symbol.Trim()[..Math.Min(symbol.Trim().Length, 64)];
-            string? normalizedName = string.IsNullOrWhiteSpace(name)
-                ? null
-                : name.Trim()[..Math.Min(name.Trim().Length, 256)];
+                : cleanSymbol;
+            string? normalizedName = TokenMetadataTextNormalizer.Normalize(name, 256);
             int? decimals = decimalsValue >= BigInteger.Zero &&
                 decimalsValue <= new BigInteger(255)
                 ? (int)decimalsValue
@@ -88,5 +87,22 @@ internal sealed class NethereumTokenMetadataProvider : ITokenMetadataProvider
         {
             return TokenMetadata.Unknown(tokenContract);
         }
+    }
+}
+
+internal static class TokenMetadataTextNormalizer
+{
+    public static string? Normalize(string? value, int maximumLength)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumLength);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        string normalized = value.Replace("\0", string.Empty, StringComparison.Ordinal).Trim();
+        return normalized.Length == 0
+            ? null
+            : normalized[..Math.Min(normalized.Length, maximumLength)];
     }
 }

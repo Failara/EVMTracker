@@ -14,7 +14,6 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "The ConnectionStrings:EvmIndexer setting is required.");
 }
 builder.Services.AddEvmIndexerInfrastructure(builder.Configuration, connectionString);
-builder.Services.AddRabbitMqMessaging(builder.Configuration);
 builder.Services.AddOutboxDispatcher(builder.Configuration);
 
 var app = builder.Build();

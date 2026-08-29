@@ -16,6 +16,9 @@ namespace EVMTracker.EvmIndexer.Infrastructure.Rpc;
 
 internal sealed class NethereumEvmLogSource : IEvmLogSource
 {
+    private const int MaximumRequestAttempts = 3;
+    private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromMilliseconds(250);
+
     private readonly Dictionary<long, Web3> clients;
     private readonly TimeSpan requestTimeout;
 
@@ -37,7 +40,8 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
             "eth_blockNumber",
             () => GetClient(chainId)
                 .Eth.Blocks.GetBlockNumber.SendRequestAsync()
-                .WaitAsync(requestTimeout, cancellationToken)).ConfigureAwait(false);
+                .WaitAsync(requestTimeout, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
         return checked((long)head.Value);
     }
 
@@ -52,7 +56,8 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
             () => GetClient(chainId)
                 .Eth.Blocks.GetBlockWithTransactionsHashesByNumber
                 .SendRequestAsync(new BlockParameter(new HexBigInteger(blockNumber)))
-                .WaitAsync(requestTimeout, cancellationToken)).ConfigureAwait(false);
+                .WaitAsync(requestTimeout, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(block.BlockHash)
             ? throw new InvalidOperationException(
                 $"RPC returned no hash for block {blockNumber} on chain {chainId}.")
@@ -63,24 +68,55 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
         long chainId,
         long fromBlock,
         long toBlock,
+        IReadOnlyCollection<string> trackedAddresses,
         CancellationToken cancellationToken)
     {
-        var filter = new NewFilterInput
+        ArgumentNullException.ThrowIfNull(trackedAddresses);
+        string[] addressTopics = trackedAddresses
+            .Select(ToAddressTopic)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (addressTopics.Length == 0)
+        {
+            return [];
+        }
+
+        var outgoingFilter = new NewFilterInput
         {
             FromBlock = new BlockParameter(new HexBigInteger(fromBlock)),
             ToBlock = new BlockParameter(new HexBigInteger(toBlock)),
-            Topics = [Erc20TransferLogDecoder.TransferTopic],
+            Topics = [Erc20TransferLogDecoder.TransferTopic, addressTopics],
+        };
+        var incomingFilter = new NewFilterInput
+        {
+            FromBlock = new BlockParameter(new HexBigInteger(fromBlock)),
+            ToBlock = new BlockParameter(new HexBigInteger(toBlock)),
+            Topics = [Erc20TransferLogDecoder.TransferTopic, null!, addressTopics],
         };
 
         try
         {
-            FilterLog[] logs = await ExecuteRpcAsync(
+            Task<FilterLog[]> outgoing = ReadLogsAsync(
                 chainId,
-                "eth_getLogs",
-                () => GetClient(chainId)
-                    .Eth.Filters.GetLogs.SendRequestAsync(filter)
-                    .WaitAsync(requestTimeout, cancellationToken)).ConfigureAwait(false);
-            return logs.Select(MapLog).ToArray();
+                outgoingFilter,
+                cancellationToken);
+            Task<FilterLog[]> incoming = ReadLogsAsync(
+                chainId,
+                incomingFilter,
+                cancellationToken);
+            await Task.WhenAll(outgoing, incoming).ConfigureAwait(false);
+            return outgoing.Result
+                .Concat(incoming.Result)
+                .DistinctBy(log => new
+                {
+                    TransactionHash = log.TransactionHash.ToLowerInvariant(),
+                    LogIndex = log.LogIndex.Value,
+                    BlockHash = log.BlockHash.ToLowerInvariant(),
+                })
+                .OrderBy(log => log.BlockNumber.Value)
+                .ThenBy(log => log.LogIndex.Value)
+                .Select(MapLog)
+                .ToArray();
         }
         catch (TimeoutException exception)
         {
@@ -94,6 +130,32 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
                 $"The RPC provider rejected blocks {fromBlock}-{toBlock}.",
                 exception);
         }
+    }
+
+    private Task<FilterLog[]> ReadLogsAsync(
+        long chainId,
+        NewFilterInput filter,
+        CancellationToken cancellationToken) =>
+        ExecuteRpcAsync(
+            chainId,
+            "eth_getLogs",
+            () => GetClient(chainId)
+                .Eth.Filters.GetLogs.SendRequestAsync(filter)
+                .WaitAsync(requestTimeout, cancellationToken),
+            cancellationToken);
+
+    private static string ToAddressTopic(string address)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+        string normalized = address.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? address[2..]
+            : address;
+        if (normalized.Length != 40 || !normalized.All(Uri.IsHexDigit))
+        {
+            throw new ArgumentException("Tracked addresses must be 20-byte EVM addresses.", nameof(address));
+        }
+
+        return $"0x{normalized.PadLeft(64, '0').ToLowerInvariant()}";
     }
 
     private static RawEvmLog MapLog(FilterLog log) =>
@@ -131,7 +193,8 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
     private static async Task<T> ExecuteRpcAsync<T>(
         long chainId,
         string method,
-        Func<Task<T>> request)
+        Func<Task<T>> request,
+        CancellationToken cancellationToken)
     {
         long startedAt = Stopwatch.GetTimestamp();
         bool failed = false;
@@ -143,7 +206,27 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
         activity?.SetTag("evm.chain.id", chainId);
         try
         {
-            return await request().ConfigureAwait(false);
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return await request().ConfigureAwait(false);
+                }
+                catch (Exception exception) when (
+                    attempt < MaximumRequestAttempts && IsTransient(exception))
+                {
+                    activity?.AddEvent(
+                        new ActivityEvent(
+                            "rpc.retry",
+                            tags: new ActivityTagsCollection
+                            {
+                                ["rpc.retry.attempt"] = attempt,
+                                ["exception.type"] = exception.GetType().Name,
+                            }));
+                    TimeSpan delay = InitialRetryDelay * attempt;
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -160,4 +243,9 @@ internal sealed class NethereumEvmLogSource : IEvmLogSource
                 failed);
         }
     }
+
+    private static bool IsTransient(Exception exception) => exception is
+        RpcClientUnknownException or
+        HttpRequestException or
+        TimeoutException;
 }

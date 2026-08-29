@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evmtracker.local/schemas/experiment-manifest.schema.json",
+  "title": "EVMTracker experiment manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "description", "environment", "protocol", "cases"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$" },
+    "description": { "type": "string", "minLength": 1 },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "dependencyImages"],
+      "properties": {
+        "kind": { "enum": ["local-testcontainers", "external-evm"] },
+        "dependencyImages": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warmups", "measuredRepetitions", "randomizeCaseOrder", "correctnessRequired"],
+      "properties": {
+        "warmups": { "type": "integer", "minimum": 0 },
+        "measuredRepetitions": { "type": "integer", "minimum": 1 },
+        "randomizeCaseOrder": { "type": "boolean" },
+        "correctnessRequired": { "type": "boolean" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "testFilter", "independentVariables", "metrics"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "testFilter": { "type": "string", "minLength": 1 },
+          "independentVariables": { "type": "object" },
+          "metrics": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

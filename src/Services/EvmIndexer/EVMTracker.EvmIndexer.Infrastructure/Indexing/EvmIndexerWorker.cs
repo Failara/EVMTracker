@@ -47,6 +47,7 @@ internal sealed partial class EvmIndexerWorker(
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            bool shouldDelay = true;
             try
             {
                 using Activity? activity = EVMTrackerTelemetry.StartActivity(
@@ -80,6 +81,9 @@ internal sealed partial class EvmIndexerWorker(
                     result.RetrievedLogCount - result.MalformedLogCount,
                     result.MalformedLogCount,
                     result.Status == IndexerRunStatus.Reorganized);
+                shouldDelay = result.Status is
+                    IndexerRunStatus.NoConfirmedBlocks or
+                    IndexerRunStatus.NoTrackedAddresses;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -94,7 +98,10 @@ internal sealed partial class EvmIndexerWorker(
                     SensitiveDataRedactor.Redact(null, exception.Message));
             }
 
-            await Task.Delay(network.PollInterval, cancellationToken).ConfigureAwait(false);
+            if (shouldDelay)
+            {
+                await Task.Delay(network.PollInterval, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "resultType": "smoke-baseline",
+  "manifest": "../experiments/local-baseline.json",
+  "recordedAtLocalDate": "2026-08-29",
+  "timezone": "Europe/Kiev",
+  "publicationGrade": false,
+  "environment": {
+    "cpu": "AMD Ryzen 5 5600",
+    "physicalCores": 6,
+    "logicalProcessors": 12,
+    "hostMemoryGiB": 31.9,
+    "operatingSystem": "Windows 11 Pro 10.0.26200 64-bit",
+    "dotnetSdk": "10.0.400",
+    "dotnetRuntime": "10.0.11",
+    "docker": "29.4.2",
+    "dockerAllocatedMemoryGiB": 15.58,
+    "images": {
+      "postgresql": "postgres:18.6-alpine3.24",
+      "rabbitmq": "rabbitmq:4.2.9-management-alpine",
+      "anvil": "ghcr.io/foundry-rs/foundry:v1.7.1"
+    }
+  },
+  "run": {
+    "testFilter": "Category=PerformanceProbe|Category=ExperimentModel",
+    "passed": 12,
+    "failed": 0,
+    "repetitionsPerCase": 1
+  },
+  "measurements": {
+    "confirmationDepth": [
+      { "depth": 0, "assumedBlockSeconds": 3, "minimumAddedLatencySeconds": 0 },
+      { "depth": 3, "assumedBlockSeconds": 3, "minimumAddedLatencySeconds": 9 },
+      { "depth": 12, "assumedBlockSeconds": 3, "minimumAddedLatencySeconds": 36 }
+    ],
+    "broadVersusFiltered": {
+      "irrelevantLogs": 50,
+      "relevantLogs": 1,
+      "broadReturnedLogs": 51,
+      "filteredReturnedLogs": 1,
+      "broadElapsedMilliseconds": 8.7547,
+      "filteredElapsedMilliseconds": 20.0834
+    },
+    "blockRange": [
+      { "blocks": 10, "returnedLogs": 1, "elapsedMilliseconds": 4.3942 },
+      { "blocks": 100, "returnedLogs": 1, "elapsedMilliseconds": 5.1052 },
+      { "blocks": 1000, "returnedLogs": 1, "elapsedMilliseconds": 4.2759 }
+    ],
+    "watchlistSize": [
+      { "trackedAddresses": 1, "returnedLogs": 1, "elapsedMilliseconds": 2.8899 },
+      { "trackedAddresses": 100, "returnedLogs": 1, "elapsedMilliseconds": 5.6166 },
+      { "trackedAddresses": 500, "returnedLogs": 1, "elapsedMilliseconds": 6.7116 }
+    ],
+    "rabbitMqBacklog": [
+      { "messages": 100, "drainMilliseconds": 108.6892, "messagesPerSecond": 920.0546144419133, "missed": 0, "duplicates": 0, "processWorkingSetDeltaBytes": 290816 },
+      { "messages": 1000, "drainMilliseconds": 160.7011, "messagesPerSecond": 6222.732762874678, "missed": 0, "duplicates": 0, "processWorkingSetDeltaBytes": 0 }
+    ]
+  },
+  "interpretation": [
+    "Address filtering reduced returned logs from 51 to 1 in the seeded sparse-relevance case, preventing 50 irrelevant logs from reaching downstream processing.",
+    "The filtered query was slower than the broad query in this tiny local dataset because the production source issues separate incoming and outgoing requests.",
+    "All backlog cases recorded zero misses and zero duplicates in this smoke run.",
+    "Confirmation-depth values are a deterministic model, not observed public-chain latency."
+  ],
+  "limitations": [
+    "Only one measured repetition was recorded per case.",
+    "Anvil runs locally and does not reproduce BSC load, network latency, provider throttling, or organic chain traffic.",
+    "Process working-set delta does not include complete container resource use.",
+    "No causal runtime comparison against an implemented modular monolith was performed."
+  ]
+}

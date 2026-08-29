@@ -15,6 +15,12 @@ public sealed class IndexerDbContext(DbContextOptions<IndexerDbContext> options)
 
     internal DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
+    internal DbSet<IndexerWatchlistProjectionRecord> WatchlistProjection =>
+        Set<IndexerWatchlistProjectionRecord>();
+
+    internal DbSet<IndexerWatchlistInboxRecord> WatchlistInboxMessages =>
+        Set<IndexerWatchlistInboxRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

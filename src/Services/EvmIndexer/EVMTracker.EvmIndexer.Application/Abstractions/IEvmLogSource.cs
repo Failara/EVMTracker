@@ -15,5 +15,6 @@ public interface IEvmLogSource
         long chainId,
         long fromBlock,
         long toBlock,
+        IReadOnlyCollection<string> trackedAddresses,
         CancellationToken cancellationToken);
 }

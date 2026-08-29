@@ -30,6 +30,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(NotificationNetworkCatalogOptions.SectionName))
             .Validate(IsValid, "NotificationNetworks configuration is invalid.")
             .ValidateOnStart();
+        services.AddOptions<NotificationDataRetentionOptions>()
+            .Bind(configuration.GetSection(NotificationDataRetentionOptions.SectionName))
+            .Validate(IsValid, "NotificationDataRetention configuration is invalid.")
+            .ValidateOnStart();
         services.AddDbContext<NotificationDbContext>(options =>
             options.UseNpgsql(
                 connectionString,
@@ -40,6 +44,8 @@ public static class DependencyInjection
         services.AddScoped<ITransferNotificationStore, TransferNotificationStore>();
         services.AddScoped<ITransferOrphanStore, TransferOrphanStore>();
         services.AddScoped<IOutboxBatchStore, NotificationOutboxBatchStore>();
+        services.AddScoped<NotificationDataRetentionService>();
+        services.AddHostedService<NotificationDataRetentionWorker>();
         services.AddSingleton<INetworkPresentationResolver, ConfiguredNetworkPresentationResolver>();
         services.AddRabbitMqMessaging(
             configuration,
@@ -100,6 +106,13 @@ public static class DependencyInjection
             IsValidExplorerBaseUrl(network.ExplorerBaseUrl)) &&
         options.Networks.Select(network => network.ChainId).Distinct().Count() ==
         options.Networks.Length;
+
+    private static bool IsValid(NotificationDataRetentionOptions options) =>
+        options.CleanupInterval > TimeSpan.Zero &&
+        options.PublishedOutboxRetention > TimeSpan.Zero &&
+        options.InboxRetention > TimeSpan.Zero &&
+        options.NotificationHistoryRetention > TimeSpan.Zero &&
+        options.BatchSize > 0;
 
     private static bool IsValidExplorerBaseUrl(string? explorerBaseUrl) =>
         string.IsNullOrWhiteSpace(explorerBaseUrl) ||

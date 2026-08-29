@@ -2,11 +2,11 @@
 
 This document describes the current state of the master's thesis project and the work required to build an MVP Telegram bot for monitoring user-added EVM addresses through ERC-20 event logs.
 
-The short version: Phases 1 through 11 are implemented. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, bounded EVM reorganization recovery, production-oriented OpenTelemetry diagnostics, and a reproducible Docker Compose deployment.
+The short version: Phases 1 through 13 are implemented. The repository has a buildable .NET 10 microservice foundation, durable Watchlist management through Telegram, a watchlist-filtered confirmed-block ERC-20 indexer, reliable rate-limited Telegram delivery, bounded EVM reorganization recovery, bounded operational storage, production-oriented OpenTelemetry diagnostics, a reproducible Docker Compose deployment, container-backed integration and recovery tests, and a reproducible thesis research package.
 
 **Thesis topic:** Models for organizing monitoring of distributed ledgers (EVM) based on microservice architecture.
 
-**Status:** Phase 11 implementation and offline verification are complete. Credential-backed live-stack and recovery validation remain before Phase 11 is fully verified.
+**Status:** Phase 13 implementation is complete. The hardening update is live-verified on BSC mainnet and Telegram; disposable PostgreSQL, RabbitMQ, and Anvil Testcontainers automate recovery and deterministic transfer scenarios; and the repository now contains predeclared hypotheses, experiment manifests and runners, a raw smoke baseline, C4/OpenAPI/AsyncAPI documentation, an architectural comparison, and a thesis chapter draft. Publication-grade repeated measurements and university-specific editing remain final academic work rather than a software phase.
 
 ## Current State
 
@@ -34,6 +34,9 @@ The repository currently contains:
 - Startup validation for the Telegram token, Watchlist API URL, polling settings, and supported network catalog.
 - Telegram command and HTTP adapter tests that run without Telegram, PostgreSQL, or a live Watchlist service.
 - Configurable multi-network EVM polling with confirmation-depth safe heads and bounded block ranges.
+- An event-driven Indexer Watchlist projection that limits `eth_getLogs` to tracked `from` and `to` topics instead of ingesting the complete network transfer firehose.
+- Automatic Watchlist event replay when the Indexer projection is empty, plus a startup barrier that prevents checkpoints advancing before subscriptions are available.
+- Checkpoint-based downtime recovery that processes missed ranges without an artificial polling delay until the confirmed chain head is reached.
 - Nethereum-backed `eth_blockNumber`, `eth_getLogs`, and ERC-20 metadata calls.
 - ERC-20 `Transfer` decoding from indexed `from`/`to` topics with normalized transfer identity.
 - Durable per-network checkpoints, processed-transfer deduplication, and transactional transfer outbox recording.
@@ -67,17 +70,28 @@ The repository currently contains:
 - Redacting structured JSON logs containing W3C trace/span and stable correlation identifiers.
 - OpenTelemetry instrumentation for ASP.NET Core, HTTP clients, MassTransit, EVM RPC calls, indexer progress, notification matching, outbox publication, and Telegram delivery.
 - Prometheus endpoints, an EVMTracker Grafana dashboard, and alert rules for lag, RPC failures, queue backlog, outbox dead letters, and Telegram failures.
-- Multi-stage, non-root .NET 10 images for all four deployable services and dedicated EF Core migration targets.
+- Multi-stage, non-root .NET 10 images for all four deployable services and compact EF Core migration bundles.
 - A Docker Compose stack containing service-owned PostgreSQL databases, RabbitMQ, OpenTelemetry Collector, Tempo, Prometheus, and Grafana.
 - Health-based startup ordering, persistent volumes, automatically provisioned observability, environment templates, and deployment/recovery documentation.
+- Live BSC hardening for transient JSON-RPC retries, invalid on-chain token metadata, and runtime-typed transfer-event serialization.
+- Credential-backed validation in which a live 10-block BSC batch persisted and delivered 2,228 ERC-20 events through the Notification inbox with empty outboxes and no RabbitMQ faults.
+- A successful RabbitMQ/PostgreSQL recovery drill and idempotent reruns of all four migration images.
+- Periodic retention of completed outbox records, processed tracked transfers, projection inbox records, notification history, and orphan history.
+- Rotated container logs, 5% default trace sampling, six-hour trace retention, and capped Prometheus retention.
+- A BSC capacity diagnosis proving that unfiltered ingestion could not keep pace and accumulated hundreds of thousands of irrelevant rows; the broad scan was replaced by address-topic filtering.
+- A post-downtime BSC recovery validation in which the clean Indexer restored one tracked address, resumed from block `118616200`, indexed transaction `0x7e214b9a983c5ec48c277a4830bcc1ed1d49b85ad033a7947ab85843d3882edf` at block `118616273`, and delivered its outgoing 5 USDT notification to Telegram on the first attempt.
+- A post-catch-up storage validation in which each service-owned PostgreSQL database remained approximately 8 MB, the Indexer retained only eight relevant transfers and a 64-block canonical window, and Docker build cache was fully purged after image creation.
+- Pinned Testcontainers fixtures for real PostgreSQL, RabbitMQ, and Foundry Anvil dependencies that remain isolated from the live Compose stack.
+- Automated PostgreSQL and RabbitMQ restart drills, durable backlog recovery, poison-message dead-lettering, a real Anvil ERC-20 log-to-fake-Telegram scenario, RPC outage recovery, and diagnostic scale probes for 1/100/500 tracked addresses and 100/1,000 queued messages.
+- A Phase 13 research package containing predeclared questions and hypotheses, a repeatable measurement protocol, machine-readable experiment definitions and baseline results, a randomized repeated-run script, C4 diagrams, OpenAPI and AsyncAPI contracts, a microservice/modular-monolith comparison, and a chapter-ready thesis draft.
 
 ### Not Yet Implemented
 
-The project still needs:
+The implemented software roadmap is complete. Before academic submission, the project still needs:
 
-- Credential-backed clean-start and dependency-recovery validation of the Docker Compose stack.
-- Business unit, integration, contract, resilience, and performance tests.
-- Reproducible experiments and thesis results.
+- Publication-grade repeated measurements on the final unchanged revision, including external-provider validation where permitted.
+- Statistical tables and figures generated from those final raw runs.
+- Citations, university formatting, language editing, and the final defense presentation.
 
 ## Target MVP Behavior
 
@@ -88,11 +102,12 @@ The MVP should support this flow:
 3. The application validates and normalizes the EVM address.
 4. The watchlist service saves the monitored address in its database.
 5. A watchlist event updates the notification service's local address projection.
-6. The EVM indexer retrieves confirmed blocks and ERC-20 `Transfer` logs through JSON-RPC.
-7. The indexer decodes the indexed `from` and `to` topics and publishes a normalized transfer event.
-8. The notification service checks both transfer participants against active watchlists.
-9. A matching transfer produces a Telegram notification request.
-10. The Telegram gateway sends the alert while respecting Telegram rate limits and retry rules.
+6. The same event updates the indexer's local filter projection.
+7. The EVM indexer retrieves confirmed ERC-20 `Transfer` logs whose indexed `from` or `to` topic matches a tracked address.
+8. The indexer decodes the indexed `from` and `to` topics and publishes a normalized transfer event.
+9. The notification service checks both transfer participants against active watchlists.
+10. A matching transfer produces a Telegram notification request.
+11. The Telegram gateway sends the alert while respecting Telegram rate limits and retry rules.
 
 The notification should contain:
 
@@ -127,12 +142,14 @@ Responsible for:
 
 - Reading chain heads and confirmed block ranges.
 - Calling `eth_getLogs` for the ERC-20 `Transfer` event.
+- Maintaining an event-driven local projection of active filter addresses.
+- Catching up from its persisted checkpoint after planned or unplanned downtime.
 - Decoding and normalizing transfer logs.
 - Maintaining a durable checkpoint for every network.
 - Detecting chain reorganizations and rewinding safely.
 - Publishing normalized ERC-20 transfer events.
 
-Owns indexer checkpoints, processed log identities, recent block hashes, and token metadata cache data.
+Owns indexer checkpoints, its Watchlist filter projection, processed log identities, recent block hashes, and token metadata cache data. Old published history is removed by configured retention policies.
 
 ### `Notification.Service`
 
@@ -551,7 +568,7 @@ Recommended tests:
 
 ## Phase 11: Dockerize and Deploy the MVP
 
-Status: implemented and offline-verified; live validation awaits a running Docker Engine, a Telegram bot token, and an EVM RPC endpoint.
+Status: implemented and live-verified with Docker Desktop, a real Telegram bot, and BSC mainnet.
 
 Goal: run the complete system predictably from a clean checkout.
 
@@ -574,39 +591,44 @@ Tasks:
 
 Recommended tests:
 
-- [ ] A clean environment starts with one documented command.
-- [ ] Services recover after RabbitMQ and PostgreSQL restarts.
-- [ ] Migrations can be applied without rebuilding application images.
+- [x] A clean environment starts with one documented command.
+- [x] Services recover after RabbitMQ and PostgreSQL restarts.
+- [x] Migrations can be applied without rebuilding application images.
+- [x] A clean Indexer database restores the Watchlist projection, catches up missed confirmed blocks, and delivers the recovered transfer through Telegram.
 
 ## Phase 12: Integration, Resilience, and Performance Testing
+
+Status: implemented and verified.
 
 Goal: validate failures and service interactions that unit tests cannot cover.
 
 Tasks:
 
-- Use Testcontainers for PostgreSQL and RabbitMQ integration tests.
-- Use Anvil and a test ERC-20 contract for deterministic chain scenarios.
-- Add an end-to-end test from token transfer to a fake Telegram adapter.
-- Add failure drills for:
+- [x] Use Testcontainers for PostgreSQL and RabbitMQ integration tests.
+- [x] Use Anvil and a deterministic ERC-20 `Transfer` emitter for chain scenarios.
+- [x] Add an end-to-end test from token transfer to a fake Telegram adapter.
+- [x] Add failure drills for:
   - RPC outage;
   - broker restart;
   - database restart;
-  - service crash;
+  - service crash/offline consumer;
   - duplicate event;
   - poisoned event;
   - Telegram throttling;
   - chain reorganization.
-- Add performance tests for increasing event rates and watchlist sizes.
-- Record recovery time, duplicate rate, missed-event rate, and resource use.
+- [x] Add performance probes for increasing event rates and watchlist sizes.
+- [x] Record recovery time, duplicate rate, missed-event rate, and process working-set change in structured test output.
 
 Recommended tests:
 
-- No confirmed transfers are missed during controlled restart tests.
-- No duplicate logical notifications appear during redelivery tests.
-- Backlogged events are processed after dependency recovery.
-- The system reaches the documented reference throughput.
+- [x] No confirmed transfers are missed during controlled restart tests.
+- [x] No duplicate logical notifications appear during redelivery tests.
+- [x] Backlogged events are processed after dependency recovery.
+- [x] The harness emits repeatable throughput measurements without machine-dependent pass/fail thresholds.
 
 ## Phase 13: Thesis Experiments and Documentation
+
+Status: implemented as a reproducible research framework with a committed smoke baseline. Final repeated measurements must be collected immediately before thesis submission.
 
 Goal: evaluate architectural models rather than only demonstrate a working bot.
 
@@ -621,24 +643,24 @@ Experiments:
 
 Tasks:
 
-- Define hypotheses before running experiments.
-- Store benchmark scripts with the repository.
-- Record hardware, software, network, and provider conditions.
-- Save raw results under `docs/thesis/results/`.
-- Separate measured conclusions from architectural reasoning.
-- Document threats to validity and experiment limitations.
-- Complete C4 diagrams, ADRs, OpenAPI, AsyncAPI, runbooks, and thesis chapters.
+- [x] Define hypotheses before running experiments.
+- [x] Store benchmark scripts with the repository.
+- [x] Record hardware, software, network, and provider conditions.
+- [x] Save the raw smoke baseline under `docs/thesis/results/`.
+- [x] Separate measured conclusions from architectural reasoning.
+- [x] Document threats to validity and experiment limitations.
+- [x] Complete C4 diagrams, ADRs, OpenAPI, AsyncAPI, runbooks, and a thesis chapter draft.
+- [ ] Replace the smoke baseline with at least five measured repetitions per case on the final submission revision.
+- [ ] Add final statistical tables, figures, academic citations, university formatting, and defense slides.
 
 ## Suggested Next Concrete Step
 
-The next concrete step is to finish Phase 11 live validation:
+All software phases are implemented. The next concrete step is the final academic evidence pass:
 
-1. Start Docker Desktop or another Linux-container Docker Engine.
-2. Copy `.env.example` to the untracked `.env` file and provide strong infrastructure passwords, a BotFather token, and an EVM RPC endpoint.
-3. Run the documented one-command startup and verify migrations, health endpoints, Telegram polling, and indexer progress.
-4. Restart RabbitMQ and all four PostgreSQL containers and confirm that the services recover without missed or duplicate logical notifications.
-
-After those checks pass, proceed to Phase 12 and automate the same integration, resilience, and performance scenarios with Testcontainers and Anvil.
+1. Freeze the revision and run `./scripts/run-thesis-experiments.ps1` without changing the implementation between cases.
+2. Repeat the external EVM validation with documented, credential-redacted provider conditions.
+3. Calculate the required distribution statistics and generate thesis-ready tables and figures from every retained TRX run.
+4. Add academic citations, apply university formatting, and prepare the defense presentation.
 
 ## MVP Completion Checklist
 
@@ -648,7 +670,7 @@ After those checks pass, proceed to Phase 12 and automate the same integration, 
 - [x] Define target microservice boundaries.
 - [x] Describe the proposed repository structure.
 - [x] Define implementation phases and thesis experiments.
-- [ ] Create C4 context, container, and component diagrams.
+- [x] Create C4 context, container, and component diagrams.
 - [x] Write initial Architecture Decision Records.
 
 ### Watchlist Management
@@ -699,23 +721,23 @@ After those checks pass, proceed to Phase 12 and automate the same integration, 
 - [x] Telegram command and Watchlist HTTP adapter tests.
 - [x] EVM indexer domain and pipeline tests.
 - [x] EVM indexer persistence integration tests.
-- [ ] Unit tests for remaining MVP business behavior.
+- [x] Unit tests for remaining MVP business behavior.
 - [x] Event-contract compatibility tests.
 - [x] Notification Watchlist-projection integration tests.
-- [ ] Integration and contract tests for the remaining service behavior.
-- [ ] End-to-end test with Anvil.
-- [ ] Resilience and performance tests.
-- [ ] Deployment and operations documentation.
+- [x] Integration and contract tests for the remaining service behavior.
+- [x] End-to-end test with Anvil.
+- [x] Resilience and performance tests.
+- [x] Deployment and operations documentation.
 
 ### Thesis Completion
 
-- [ ] Research hypotheses finalized.
-- [ ] Monitoring-model comparison completed.
-- [ ] Microservice and modular-monolith comparison completed.
-- [ ] Raw benchmark results committed.
-- [ ] Results analyzed with threats to validity.
+- [x] Research hypotheses finalized.
+- [x] Monitoring-model smoke comparison completed.
+- [x] Microservice and modular-monolith analytical comparison completed.
+- [x] Raw smoke benchmark results committed.
+- [x] Baseline results analyzed with threats to validity.
 - [ ] Thesis chapters and presentation completed.
-- [ ] End-to-end MVP validated on a live EVM network.
+- [x] End-to-end MVP validated on a live EVM network.
 
 ## MVP Definition of Done
 

@@ -1,0 +1,286 @@
+asyncapi: 3.0.0
+info:
+  title: EVMTracker Integration Events
+  version: 1.0.0
+  description: RabbitMQ category envelopes and their versioned logical event payloads.
+defaultContentType: application/json
+servers:
+  localRabbitMq:
+    host: localhost:5672
+    protocol: amqp
+    description: Development broker; credentials are supplied outside this document.
+channels:
+  watchlistEvents:
+    address: 'EVMTracker.Contracts.Watchlists:WatchlistIntegrationEventEnvelope'
+    description: Durable fanout exchange consumed by Indexer and Notification watchlist projections.
+    messages:
+      envelope:
+        $ref: '#/components/messages/WatchlistEnvelope'
+  transferEvents:
+    address: 'EVMTracker.Contracts.Transfers:TransferIntegrationEventEnvelope'
+    description: Durable fanout exchange consumed by the Notification transfer matcher.
+    messages:
+      envelope:
+        $ref: '#/components/messages/TransferEnvelope'
+  notificationEvents:
+    address: 'EVMTracker.Contracts.Notifications:NotificationIntegrationEventEnvelope'
+    description: Durable fanout exchange consumed by the Telegram delivery gateway.
+    messages:
+      envelope:
+        $ref: '#/components/messages/NotificationEnvelope'
+operations:
+  publishWatchlistEvents:
+    action: send
+    channel:
+      $ref: '#/channels/watchlistEvents'
+    messages:
+      - $ref: '#/channels/watchlistEvents/messages/envelope'
+  consumeWatchlistEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/watchlistEvents'
+    messages:
+      - $ref: '#/channels/watchlistEvents/messages/envelope'
+  publishTransferEvents:
+    action: send
+    channel:
+      $ref: '#/channels/transferEvents'
+    messages:
+      - $ref: '#/channels/transferEvents/messages/envelope'
+  consumeTransferEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/transferEvents'
+    messages:
+      - $ref: '#/channels/transferEvents/messages/envelope'
+  publishNotificationEvents:
+    action: send
+    channel:
+      $ref: '#/channels/notificationEvents'
+    messages:
+      - $ref: '#/channels/notificationEvents/messages/envelope'
+  consumeNotificationEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationEvents'
+    messages:
+      - $ref: '#/channels/notificationEvents/messages/envelope'
+components:
+  messages:
+    WatchlistEnvelope:
+      name: WatchlistIntegrationEventEnvelope
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EnvelopeBase'
+          - type: object
+            properties:
+              eventType:
+                enum:
+                  - watchlist.address-added.v1
+                  - watchlist.address-updated.v1
+                  - watchlist.address-removed.v1
+                  - watchlist.projection-reset.v1
+              payload:
+                oneOf:
+                  - $ref: '#/components/schemas/AddressAddedV1'
+                  - $ref: '#/components/schemas/AddressUpdatedV1'
+                  - $ref: '#/components/schemas/AddressRemovedV1'
+                  - $ref: '#/components/schemas/WatchlistProjectionResetV1'
+    TransferEnvelope:
+      name: TransferIntegrationEventEnvelope
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EnvelopeBase'
+          - type: object
+            properties:
+              eventType:
+                enum:
+                  - transfers.erc20-observed.v1
+                  - transfers.erc20-orphaned.v1
+              payload:
+                oneOf:
+                  - $ref: '#/components/schemas/Erc20TransferObservedV1'
+                  - $ref: '#/components/schemas/Erc20TransferOrphanedV1'
+    NotificationEnvelope:
+      name: NotificationIntegrationEventEnvelope
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EnvelopeBase'
+          - type: object
+            properties:
+              eventType:
+                const: notifications.telegram-delivery-requested.v1
+              payload:
+                $ref: '#/components/schemas/TelegramDeliveryRequestedV1'
+  schemas:
+    EnvelopeBase:
+      type: object
+      required: [eventId, eventType, eventVersion, occurredAt, correlationId, payload]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        eventVersion:
+          type: integer
+          minimum: 1
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        causationId:
+          type: [string, 'null']
+          format: uuid
+        payload:
+          type: object
+    EventBase:
+      type: object
+      required: [eventId, occurredAtUtc]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        occurredAtUtc:
+          type: string
+          format: date-time
+    AddressConfiguredBase:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [trackedAddressId, telegramUserId, telegramChatId, address, chainIds]
+          properties:
+            trackedAddressId:
+              type: string
+              format: uuid
+            telegramUserId:
+              type: integer
+              format: int64
+            telegramChatId:
+              type: integer
+              format: int64
+            address:
+              $ref: '#/components/schemas/EvmAddress'
+            label:
+              type: [string, 'null']
+            chainIds:
+              type: array
+              uniqueItems: true
+              items:
+                type: integer
+                format: int64
+                minimum: 1
+    AddressAddedV1:
+      allOf:
+        - $ref: '#/components/schemas/AddressConfiguredBase'
+    AddressUpdatedV1:
+      allOf:
+        - $ref: '#/components/schemas/AddressConfiguredBase'
+    AddressRemovedV1:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [trackedAddressId, telegramUserId, telegramChatId, address]
+          properties:
+            trackedAddressId:
+              type: string
+              format: uuid
+            telegramUserId:
+              type: integer
+              format: int64
+            telegramChatId:
+              type: integer
+              format: int64
+            address:
+              $ref: '#/components/schemas/EvmAddress'
+    WatchlistProjectionResetV1:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [replayId]
+          properties:
+            replayId:
+              type: string
+              format: uuid
+    Erc20TransferObservedV1:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [chainId, tokenContract, fromAddress, toAddress, rawValue, tokenSymbol, transactionHash, blockNumber, blockHash, logIndex]
+          properties:
+            chainId:
+              type: integer
+              format: int64
+              minimum: 1
+            tokenContract:
+              $ref: '#/components/schemas/EvmAddress'
+            fromAddress:
+              $ref: '#/components/schemas/EvmAddress'
+            toAddress:
+              $ref: '#/components/schemas/EvmAddress'
+            rawValue:
+              type: string
+              pattern: '^[0-9]+$'
+            tokenSymbol:
+              type: string
+            tokenName:
+              type: [string, 'null']
+            tokenDecimals:
+              type: [integer, 'null']
+              minimum: 0
+              maximum: 255
+            transactionHash:
+              $ref: '#/components/schemas/Hash32'
+            blockNumber:
+              type: integer
+              format: int64
+              minimum: 0
+            blockHash:
+              $ref: '#/components/schemas/Hash32'
+            logIndex:
+              type: integer
+              format: int64
+              minimum: 0
+    Erc20TransferOrphanedV1:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [chainId, transactionHash, logIndex, formerBlockHash]
+          properties:
+            chainId:
+              type: integer
+              format: int64
+              minimum: 1
+            transactionHash:
+              $ref: '#/components/schemas/Hash32'
+            logIndex:
+              type: integer
+              format: int64
+              minimum: 0
+            formerBlockHash:
+              $ref: '#/components/schemas/Hash32'
+    TelegramDeliveryRequestedV1:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [notificationId, telegramChatId, message, parseMode]
+          properties:
+            notificationId:
+              type: string
+              format: uuid
+            telegramChatId:
+              type: integer
+              format: int64
+            message:
+              type: string
+            parseMode:
+              type: string
+              enum: [HTML, Markdown, MarkdownV2]
+    EvmAddress:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{40}$'
+    Hash32:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{64}$'

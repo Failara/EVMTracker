@@ -68,6 +68,27 @@ public sealed class EvmIndexerProcessorTests
     }
 
     [Fact]
+    public async Task NoTrackedAddressesDoesNotAdvanceCheckpoint()
+    {
+        var source = new FakeLogSource { Head = 120 };
+        var store = new FakeStateStore();
+        var processor = new EvmIndexerProcessor(
+            source,
+            new FakeTrackedAddressFilter([]),
+            new FakeTokenMetadataProvider(),
+            store,
+            new FixedTimeProvider(Now));
+
+        IndexerRunResult result = await processor.ProcessOnceAsync(
+            CreateConfiguration(startBlock: 100),
+            CancellationToken.None);
+
+        Assert.Equal(IndexerRunStatus.NoTrackedAddresses, result.Status);
+        Assert.Null(source.LastFromBlock);
+        Assert.Null(store.Checkpoint);
+    }
+
+    [Fact]
     public async Task ProviderRangeLimitHalvesRangeWithoutAdvancingBlock()
     {
         var source = new FakeLogSource { Head = 500, ThrowRangeLimit = true };
@@ -125,6 +146,7 @@ public sealed class EvmIndexerProcessorTests
         };
         var processor = new EvmIndexerProcessor(
             source,
+            new FakeTrackedAddressFilter(),
             metadataProvider,
             store,
             new FixedTimeProvider(Now));
@@ -217,6 +239,7 @@ public sealed class EvmIndexerProcessorTests
         IIndexerStateStore store) =>
         new(
             source,
+            new FakeTrackedAddressFilter(),
             new FakeTokenMetadataProvider(),
             store,
             new FixedTimeProvider(Now));
@@ -250,6 +273,8 @@ public sealed class EvmIndexerProcessorTests
 
         public long? LastToBlock { get; private set; }
 
+        public IReadOnlyCollection<string> LastTrackedAddresses { get; private set; } = [];
+
         public Dictionary<long, string> BlockHashes { get; } = [];
 
         public Task<long> GetHeadBlockNumberAsync(
@@ -275,15 +300,29 @@ public sealed class EvmIndexerProcessorTests
             long chainId,
             long fromBlock,
             long toBlock,
+            IReadOnlyCollection<string> trackedAddresses,
             CancellationToken cancellationToken)
         {
             LastFromBlock = fromBlock;
             LastToBlock = toBlock;
+            LastTrackedAddresses = trackedAddresses;
             return ThrowRangeLimit
                 ? Task.FromException<IReadOnlyList<RawEvmLog>>(
                     new EvmRpcRangeLimitException("Range too large."))
                 : Task.FromResult(Logs);
         }
+    }
+
+    private sealed class FakeTrackedAddressFilter(
+        IReadOnlyCollection<string>? addresses = null) : ITrackedAddressFilter
+    {
+        public Task<IReadOnlyCollection<string>> ListAsync(
+            long chainId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                addresses ??
+                (IReadOnlyCollection<string>)
+                    ["0x1111111111111111111111111111111111111111"]);
     }
 
     private sealed class FakeTokenMetadataProvider : ITokenMetadataProvider

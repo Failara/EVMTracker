@@ -9,6 +9,7 @@ namespace EVMTracker.EvmIndexer.Application.Indexing;
 
 public sealed class EvmIndexerProcessor(
     IEvmLogSource logSource,
+    ITrackedAddressFilter trackedAddressFilter,
     ITokenMetadataProvider tokenMetadataProvider,
     IIndexerStateStore stateStore,
     TimeProvider timeProvider)
@@ -54,6 +55,23 @@ public sealed class EvmIndexerProcessor(
                 LastProcessedBlock: nextBlock - 1);
         }
 
+        IReadOnlyCollection<string> trackedAddresses = await trackedAddressFilter.ListAsync(
+            network.ChainId,
+            cancellationToken).ConfigureAwait(false);
+        if (trackedAddresses.Count == 0)
+        {
+            return new IndexerRunResult(
+                IndexerRunStatus.NoTrackedAddresses,
+                null,
+                null,
+                0,
+                0,
+                0,
+                currentRange,
+                ChainHead: chainHead,
+                LastProcessedBlock: nextBlock - 1);
+        }
+
         BlockRange blockRange = BlockRange.Create(nextBlock, safeHead, currentRange);
         IReadOnlyList<RawEvmLog> logs;
         try
@@ -62,6 +80,7 @@ public sealed class EvmIndexerProcessor(
                 network.ChainId,
                 blockRange.FromBlock,
                 blockRange.ToBlock,
+                trackedAddresses,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (EvmRpcRangeLimitException)

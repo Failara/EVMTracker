@@ -6,10 +6,15 @@ COPY . .
 RUN dotnet restore src/Services/TelegramGateway/EVMTracker.TelegramGateway.Worker/EVMTracker.TelegramGateway.Worker.csproj --configfile NuGet.Config
 RUN dotnet publish src/Services/TelegramGateway/EVMTracker.TelegramGateway.Worker/EVMTracker.TelegramGateway.Worker.csproj --configuration Release --no-restore --output /app/publish --property:UseAppHost=false
 
-FROM build AS migrations
+FROM build AS migration-build
 RUN dotnet tool restore --configfile NuGet.Config
 RUN dotnet build src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure/EVMTracker.TelegramGateway.Infrastructure.csproj --configuration Release --no-restore
-ENTRYPOINT ["dotnet", "tool", "run", "dotnet-ef", "database", "update", "--no-build", "--project", "src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure", "--startup-project", "src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure", "--context", "TelegramGatewayDbContext"]
+RUN dotnet tool run dotnet-ef migrations bundle --configuration Release --no-build --force --output /app/migrate --project src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure --startup-project src/Services/TelegramGateway/EVMTracker.TelegramGateway.Infrastructure --context TelegramGatewayDbContext
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS migrations
+WORKDIR /app
+COPY --from=migration-build /app/migrate ./migrate
+ENTRYPOINT ["./migrate"]
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
 RUN apt-get update \

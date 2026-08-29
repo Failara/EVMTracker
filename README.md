@@ -2,7 +2,7 @@
 
 EVMTracker is a master's thesis project that monitors user-selected EVM addresses for ERC-20 transfers and reports matching activity through Telegram. The target implementation uses independently deployable .NET 10 services, PostgreSQL, RabbitMQ, and event-driven integration.
 
-Phases 1 through 11 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, bounded chain-reorganization recovery, OpenTelemetry-based operational diagnostics, and a reproducible Docker Compose deployment. See [Roadmap.md](Roadmap.md) for the complete implementation and research plan.
+Phases 1 through 13 are implemented: the solution foundation, durable Watchlist API, Telegram command gateway, confirmed ERC-20 log indexer, RabbitMQ outbox delivery, durable transfer matching, reliable Telegram alerts, bounded chain-reorganization recovery, OpenTelemetry-based operational diagnostics, a reproducible Docker Compose deployment, container-backed integration/recovery tests, and a reproducible thesis experiment package. See [Roadmap.md](Roadmap.md) for the complete implementation plan and [the thesis research package](docs/thesis/README.md) for hypotheses, methodology, architecture comparison, raw baseline data, and the chapter draft.
 
 ## Prerequisites
 
@@ -34,6 +34,10 @@ dotnet restore EVMTracker.sln --configfile NuGet.Config
 dotnet build EVMTracker.sln --configuration Release --no-restore
 dotnet test EVMTracker.sln --configuration Release --no-build
 ```
+
+The full test run includes isolated PostgreSQL, RabbitMQ, and Anvil Testcontainers and therefore requires Docker. Use `./scripts/run-phase12-tests.ps1` to run only the container-backed recovery and performance scenarios. See [phase12-testing.md](docs/operations/phase12-testing.md) for coverage and test-output guidance.
+
+Use `./scripts/run-thesis-experiments.ps1` for the Phase 13 protocol. It records a non-secret environment manifest, performs a warm-up, randomizes the experiment-case order, and writes each measured repetition as a TRX artifact. The committed one-run baseline validates the harness but is not a substitute for repeated thesis measurements.
 
 ## Watchlist database
 
@@ -112,7 +116,9 @@ Then start the worker:
 dotnet run --project src/Services/EvmIndexer/EVMTracker.EvmIndexer.Worker
 ```
 
-For each configured network, the worker subtracts the confirmation depth from the chain head, requests bounded `Transfer(address,address,uint256)` log ranges, decodes indexed participants, resolves cached token metadata, and atomically stores processed-transfer identity, the next checkpoint, and a versioned outbox event. Provider range-limit or timeout responses reduce the next block-range size.
+For each configured network, the worker subtracts the confirmation depth from the chain head and requests bounded `Transfer(address,address,uint256)` log ranges filtered by tracked addresses in the indexed `from` and `to` topics. It decodes matching participants, resolves cached token metadata, and atomically stores processed-transfer identity, the next checkpoint, and a versioned outbox event. Provider range-limit or timeout responses reduce the next block-range size.
+
+The indexer maintains its own event-driven Watchlist projection. An empty projection pauses checkpoint advancement and triggers a Watchlist replay request. After downtime, the worker resumes from the persisted next block and processes missed ranges without the normal polling delay until it catches the confirmed head. Published rows and old tracked-transfer history are removed by configurable retention workers.
 
 The worker also retains `ReorganizationWindow` canonical hashes. Before advancing a checkpoint it verifies the latest retained hash, rewinds to a discovered common ancestor on mismatch, and publishes deterministic orphan events. See `docs/operations/reorganization-handling.md` for the recovery model and operator procedure.
 

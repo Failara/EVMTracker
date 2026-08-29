@@ -6,10 +6,15 @@ COPY . .
 RUN dotnet restore src/Services/Watchlist/EVMTracker.Watchlist.Api/EVMTracker.Watchlist.Api.csproj --configfile NuGet.Config
 RUN dotnet publish src/Services/Watchlist/EVMTracker.Watchlist.Api/EVMTracker.Watchlist.Api.csproj --configuration Release --no-restore --output /app/publish --property:UseAppHost=false
 
-FROM build AS migrations
+FROM build AS migration-build
 RUN dotnet tool restore --configfile NuGet.Config
 RUN dotnet build src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure/EVMTracker.Watchlist.Infrastructure.csproj --configuration Release --no-restore
-ENTRYPOINT ["dotnet", "tool", "run", "dotnet-ef", "database", "update", "--no-build", "--project", "src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure", "--startup-project", "src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure", "--context", "WatchlistDbContext"]
+RUN dotnet tool run dotnet-ef migrations bundle --configuration Release --no-build --force --output /app/migrate --project src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure --startup-project src/Services/Watchlist/EVMTracker.Watchlist.Infrastructure --context WatchlistDbContext
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS migrations
+WORKDIR /app
+COPY --from=migration-build /app/migrate ./migrate
+ENTRYPOINT ["./migrate"]
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
 RUN apt-get update \

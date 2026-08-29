@@ -273,7 +273,10 @@ internal sealed class IndexerStateStore(IndexerDbContext dbContext) : IIndexerSt
             OccurredAtUtc = integrationEvent.OccurredAtUtc,
             CorrelationId = integrationEvent.EventId,
             CausationId = causationId,
-            Payload = JsonSerializer.Serialize(integrationEvent, SerializerOptions),
+            Payload = JsonSerializer.Serialize(
+                integrationEvent,
+                integrationEvent.GetType(),
+                SerializerOptions),
         };
 
     private async Task UpsertCheckpointAsync(
