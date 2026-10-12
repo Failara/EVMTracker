@@ -78,9 +78,11 @@ internal sealed class TrackedAddressRepository(WatchlistDbContext dbContext)
         record.Label = trackedAddress.Label;
         record.IsActive = trackedAddress.IsActive;
 
-        HashSet<long> desiredChainIds = trackedAddress.EnabledNetworks
-            .Select(chainId => chainId.Value)
-            .ToHashSet();
+        HashSet<long> desiredChainIds = trackedAddress.IsActive
+            ? trackedAddress.EnabledNetworks
+                .Select(chainId => chainId.Value)
+                .ToHashSet()
+            : [];
         TrackedAddressNetworkRecord[] removedNetworks = record.Networks
             .Where(network => !desiredChainIds.Contains(network.ChainId))
             .ToArray();
